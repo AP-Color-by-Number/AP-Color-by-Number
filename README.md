@@ -3,6 +3,9 @@
 A relaxing color-by-number for [Archipelago](https://archipelago.gg). Every numbered
 color is an item: until someone sends you **Color 7**, the 7s stay blank.
 
+**Play: https://lighting8282.github.io/AP-Color-by-Number/** -- get the apworld and a
+template yaml from the [latest release](https://github.com/lighting8282/AP-Color-by-Number/releases/latest).
+
 Based on a community proposal. Plays in the browser; upload your own pictures or
 paint ones generated from your seed.
 
