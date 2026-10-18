@@ -4,13 +4,13 @@
 // follows the slot to any device. Nothing is saved until the restore has
 // landed, or the freshly generated pictures would overwrite real progress.
 
-import { Client } from "../node_modules/archipelago.js/dist/index.js";
+import { Client } from "../node_modules/archipelago.js/dist/index.js?v=1953652d";
 
 import {
   ENCOURAGEMENT, ENCOURAGEMENTS, FOG_TRAP, GAME_NAME, GRAYSCALE_TRAP, SMUDGE_TRAP, canvasItem, colorItem,
-} from "./data.js";
-import { Game } from "./game.js";
-import { rng } from "./picture.js";
+} from "./data.js?v=1953652d";
+import { Game } from "./game.js?v=1953652d";
+import { rng } from "./picture.js?v=1953652d";
 
 const OFFLINE_KEY = "cbn_offline";
 const SAVE_DELAY_MS = 1500;

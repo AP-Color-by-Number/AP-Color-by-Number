@@ -5,7 +5,7 @@
   "description": "Browser client for Color by Number for Archipelago",
   "type": "module",
   "scripts": {
-    "test": "python tools/dump_tables.py build/tables.json && node docs/test/game_test.mjs build/tables.json",
+    "test": "python tools/stamp_build.py --check && python tools/dump_tables.py build/tables.json && node docs/test/game_test.mjs build/tables.json",
     "serve": "python tools/serve_docs.py 8791"
   }
 }

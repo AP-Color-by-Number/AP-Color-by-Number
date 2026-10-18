@@ -4,18 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Color by Number AP</title>
+  <meta name="build" content="?v=1953652d">
   <meta name="description" content="A color-by-number game for Archipelago: every numbered color is an item.">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
   <link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <meta property="og:image" content="https://ap-color-by-number.github.io/AP-Color-by-Number/assets/icon-512.png">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=1953652d">
 </head>
 <body>
   <header class="top">
     <h1><a id="home" href="./" title="Back to the front page"><img class="logo" src="assets/icon-512.png" alt="" width="28" height="28">Color by Number <small>AP</small></a></h1>
     <span id="status" class="status">Not connected</span>
   </header>
+
+  <div id="update-banner" class="update-banner" role="alert" hidden>
+    A newer version of this page is out. Your painting is saved, so reloading is safe.
+    <button id="update-reload" class="primary">Reload now</button>
+  </div>
 
   <section id="connect" class="panel">
     <form id="connect-form">
@@ -107,6 +113,6 @@
 
   <div id="toast" class="toast" role="status" hidden></div>
 
-  <script type="module" src="src/ui.js"></script>
+  <script type="module" src="src/ui.js?v=1953652d"></script>
 </body>
 </html>

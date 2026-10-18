@@ -1,9 +1,9 @@
 // DOM layer: the canvas, palette, tools and forms. Reads CbnClient + Game,
 // never changes game state except through them.
 
-import { CbnClient } from "./client.js";
-import { TOOL_USES, canvasItem, colorItem } from "./data.js";
-import { colorDistance, lightness, mapToPalette, oklchHex, prepareImage, quantize } from "./picture.js";
+import { CbnClient } from "./client.js?v=1953652d";
+import { TOOL_USES, canvasItem, colorItem } from "./data.js?v=1953652d";
+import { colorDistance, lightness, mapToPalette, oklchHex, prepareImage, quantize } from "./picture.js?v=1953652d";
 
 const $ = (id) => document.getElementById(id);
 const canvasEl = $("canvas");
@@ -561,6 +561,30 @@ function tickEffects() {
   if (parts.length) effectTimer = setTimeout(tickEffects, 1000);
   else if (cbn.game) { drawAll(); renderPalette(); }
 }
+
+// -- stale tab check ---------------------------------------------------------------------
+// A tab left open across a deploy keeps running the code it loaded, which
+// can be older than the seed it connects to (a v0.2 seed on a v0.1 page could
+// not count tool uses at all). version.json names the live build; fetch it
+// past every cache and offer a reload when it differs from the running one.
+const RUNNING_BUILD = (document.querySelector('meta[name="build"]')?.content ?? "").replace("?v=", "");
+
+async function checkForUpdate() {
+  if (!RUNNING_BUILD) return; // unstamped dev copy
+  try {
+    const response = await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" });
+    const { build } = await response.json();
+    if (build && build !== RUNNING_BUILD) $("update-banner").hidden = false;
+  } catch { /* offline or blocked: keep playing */ }
+}
+
+$("update-reload").addEventListener("click", async () => {
+  if (cbn.game) await cbn.leave(); // flush the save first
+  location.reload();
+});
+checkForUpdate();
+setInterval(checkForUpdate, 5 * 60 * 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkForUpdate(); });
 
 // -- log + toast ----------------------------------------------------------------------------
 function log(text, kind = "info") {
