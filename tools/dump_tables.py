@@ -23,6 +23,10 @@ out.write_text(json.dumps({
     "game": data.GAME_NAME,
     "items": data.ITEM_NAME_TO_ID,
     "locations": data.LOCATION_NAME_TO_ID,
+    "steps": {k: list(v) for k, v in data.COLOR_CHECK_STEPS.items()},
+    "toolCharges": data.TOOL_CHARGES,
+    "refillCharges": data.REFILL_CHARGES,
+    "toolUses": list(data.TOOL_USES),
     "milestones": {k: [data.colors_for_milestone(k, m) for m in range(4)] for k in range(4, data.MAX_COLORS + 1)},
 }), encoding="utf-8")
 print(out)

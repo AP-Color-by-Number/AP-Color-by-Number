@@ -2,9 +2,20 @@
 // docs/test/game_test.mjs checks them against a dump of the Python tables.
 
 export const GAME_NAME = "Color by Number";
-export const MAX_PICTURES = 10;
+export const MAX_PICTURES = 20;
 export const MAX_COLORS = 24;
-export const PERCENTS = [25, 50, 75, 100];
+/** Per-color milestone percents for each color_checks setting. */
+export const COLOR_CHECK_STEPS = {
+  quarters: [25, 50, 75, 100],
+  fifths: [20, 40, 60, 80, 100],
+  tenths: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+};
+/** v0.1 slot data has no color_percents: those seeds are quarters. */
+export const DEFAULT_PERCENTS = COLOR_CHECK_STEPS.quarters;
+// The v0.1 percents keep their ids; the rest live in their own block.
+const BASE_PERCENTS = [25, 50, 75, 100];
+const EXTRA_PERCENTS = [10, 20, 30, 40, 60, 70, 80, 90];
+export const ALL_PERCENTS = [...new Set([...BASE_PERCENTS, ...EXTRA_PERCENTS])].sort((a, b) => a - b);
 export const PICTURE_MILESTONES = ["Quarter Done", "Half Done", "Three Quarters Done", "Complete"];
 
 const LOCATION_BASE = 7_350_000;
@@ -26,11 +37,21 @@ export const TRAPS = [SMUDGE_TRAP, GRAYSCALE_TRAP, FOG_TRAP];
 export const TOOL_CHARGES = 5;
 export const REFILL_CHARGES = 3;
 
-/** Location id for picture p (1-based), color n (1-based), milestone m (0..3). */
-export const colorLocationId = (p, n, m) => LOCATION_BASE + p * 1000 + n * 10 + m;
+/** Location id for picture p (1-based), color n (1-based), at `percent`. */
+export function colorLocationId(p, n, percent) {
+  const base = BASE_PERCENTS.indexOf(percent);
+  if (base >= 0) return LOCATION_BASE + p * 1000 + n * 10 + base;
+  return LOCATION_BASE + 100_000 + p * 1000 + n * 10 + EXTRA_PERCENTS.indexOf(percent);
+}
 export const pictureLocationId = (p, m) => LOCATION_BASE + p * 1000 + 900 + m;
 
-export const colorLocation = (p, n, m) => `Picture ${p} - Color ${n} ${PERCENTS[m]}%`;
+export const colorLocation = (p, n, percent) => `Picture ${p} - Color ${n} ${percent}%`;
+
+/** Tool checks: use each tool this many times. */
+export const TOOL_USES = [3, 5, 10];
+export const TOOL_NAMES = { bucket: PAINT_BUCKET, wide: WIDE_BRUSH };
+export const toolLocation = (tool, uses) => `${TOOL_NAMES[tool]} - Used ${uses} Times`;
+export const toolLocationId = (tool, j) => LOCATION_BASE + 90_000 + (tool === "bucket" ? 0 : 10) + j;
 export const pictureLocation = (p, m) => `Picture ${p} - ${PICTURE_MILESTONES[m]}`;
 
 /** Finished colors needed for whole-picture milestone m. */

@@ -150,8 +150,12 @@ export class CbnClient {
   // -- painting ---------------------------------------------------------------------
   /** Paint with `tool`; returns the cells painted. */
   paint(p, cell, color, tool) {
+    const before = tool === "brush" ? 0 : this.game.spent[tool];
     const cells = this.game.apply(p, cell, color, tool);
-    if (cells.length) this.afterPaint(tool !== "brush");
+    // A tool use can paint nothing (its patch was done) and still be a use
+    // that earns a tool check, so check after any use too.
+    const used = tool !== "brush" && this.game.spent[tool] !== before;
+    if (cells.length || used) this.afterPaint(used);
     return cells;
   }
 

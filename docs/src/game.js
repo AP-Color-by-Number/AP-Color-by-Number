@@ -2,8 +2,8 @@
 // No DOM and no socket, so the node tests drive it directly.
 
 import {
-  BRUSH_REFILL, BUCKET_REFILL, PAINT_BUCKET, PERCENTS, PICTURE_MILESTONES, REFILL_CHARGES, TOOL_CHARGES, WIDE_BRUSH,
-  canvasItem, colorItem, colorLocationId, colorsForMilestone, pictureLocationId,
+  BRUSH_REFILL, BUCKET_REFILL, DEFAULT_PERCENTS, PAINT_BUCKET, PICTURE_MILESTONES, REFILL_CHARGES, TOOL_CHARGES,
+  TOOL_USES, WIDE_BRUSH, canvasItem, colorItem, colorLocationId, colorsForMilestone, pictureLocationId, toolLocationId,
 } from "./data.js";
 import { generatePicture } from "./picture.js";
 
@@ -140,6 +140,9 @@ export class Game {
     this.k = slot.colors_per_picture;
     this.grid = slot.grid_size;
     this.seed = slot.picture_seed;
+    // Both absent from v0.1 slot data, which generated exactly these defaults.
+    this.percents = Array.isArray(slot.color_percents) ? slot.color_percents : DEFAULT_PERCENTS;
+    this.toolChecks = slot.tool_checks === true;
     this.canvases = Array.from({ length: this.pictureCount }, (_, i) =>
       new Canvas(generatePicture(this.seed, i + 1, this.grid, this.k), this.k));
     this.colors = new Set(); // 0-based palette indexes received
@@ -192,7 +195,10 @@ export class Game {
       targets = canvas.cells[i] === color ? [i] : [];
     }
     const painted = targets.filter((j) => canvas.paint(j));
-    if (painted.length && tool !== "brush") {
+    // A tool used on its number counts as a use (and spends a charge) even
+    // when that patch was already painted. Otherwise a finished picture could
+    // leave the tool checks impossible to reach.
+    if (targets.length && tool !== "brush") {
       this.charges[tool]--;
       this.spent[tool]++;
     }
@@ -225,15 +231,20 @@ export class Game {
     const out = [];
     this.canvases.forEach((canvas, p) => {
       for (let c = 0; c < this.k; c++) {
-        PERCENTS.forEach((pct, m) => {
-          if (canvas.done[c] * 100 >= canvas.total[c] * pct) out.push(colorLocationId(p + 1, c + 1, m));
-        });
+        for (const pct of this.percents) {
+          if (canvas.done[c] * 100 >= canvas.total[c] * pct) out.push(colorLocationId(p + 1, c + 1, pct));
+        }
       }
       const finished = canvas.finishedColors();
       PICTURE_MILESTONES.forEach((_, m) => {
         if (finished >= colorsForMilestone(this.k, m)) out.push(pictureLocationId(p + 1, m));
       });
     });
+    if (this.toolChecks) {
+      for (const tool of ["bucket", "wide"]) {
+        TOOL_USES.forEach((uses, j) => { if (this.spent[tool] >= uses) out.push(toolLocationId(tool, j)); });
+      }
+    }
     return out;
   }
 

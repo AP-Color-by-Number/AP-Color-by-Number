@@ -2,7 +2,7 @@
 // never changes game state except through them.
 
 import { CbnClient } from "./client.js";
-import { canvasItem, colorItem } from "./data.js";
+import { TOOL_USES, canvasItem, colorItem } from "./data.js";
 import { colorDistance, lightness, mapToPalette, oklchHex, prepareImage, quantize } from "./picture.js";
 
 const $ = (id) => document.getElementById(id);
@@ -59,7 +59,7 @@ $("offline-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || lo)));
   cbn.startOffline({
-    pictures: clamp($("off-pictures").value, 1, 10),
+    pictures: clamp($("off-pictures").value, 1, 20),
     colors: clamp($("off-colors").value, 4, 24),
     grid: clamp($("off-grid").value, 16, 64),
   });
@@ -376,9 +376,15 @@ function paintCell(i) {
     toast("Pick a color first.");
     return;
   }
+  const spentBefore = view.tool === "brush" ? 0 : g.spent[view.tool];
   const cells = cbn.paint(view.picture, i, view.color, view.tool);
   cells.forEach(drawCell);
-  if (cells.length) {
+  if (!cells.length && view.tool !== "brush" && g.spent[view.tool] !== spentBefore) {
+    // Used on a patch that was already done: still a use, so show it.
+    renderTools();
+    renderProgress();
+    toast("Already painted, but that still counts as a use.");
+  } else if (cells.length) {
     renderPalette();
     renderProgress();
     if (c.done[view.color] === c.total[view.color]) {
@@ -534,7 +540,14 @@ function renderProgress() {
   const pictures = g.canvases.filter((x) => x.complete).length;
   $("progress").textContent = `Picture ${view.picture + 1}: ${pct}% painted · ${c.finishedColors()}/${g.k} colors finished`
     + ` · ${g.colors.size}/${g.k} colors received · ${pictures}/${g.pictureCount} pictures done`
-    + (c.src === "upload" ? " · your image" : "");
+    + (c.src === "upload" ? " · your image" : "")
+    + (g.toolChecks && !cbn.offline ? ` · tool uses: bucket ${toolUses(g.spent.bucket)}, wide ${toolUses(g.spent.wide)}` : "");
+}
+
+/** "4 (next check at 5)" or "10 (all checks)". */
+function toolUses(spent) {
+  const next = TOOL_USES.find((n) => n > spent);
+  return next ? `${spent}/${next}` : `${spent} ✓`;
 }
 
 let effectTimer = null;

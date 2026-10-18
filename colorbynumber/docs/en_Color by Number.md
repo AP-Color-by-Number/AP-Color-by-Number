@@ -12,9 +12,14 @@ the seed's number of colors.
 
 ## What are the locations?
 
-For every picture and every color, painting 25%, 50%, 75% and 100% of that
-color's cells is a check. Each picture also has four milestones counted in
+For every picture and every color, painting part of that color's cells is a
+check. The `color_checks` option sets how often: every 25% (4 per color), every
+20% (5) or every 10% (10). Each picture also has four milestones counted in
 finished colors: a quarter, half, three quarters and all of its colors.
+
+With `tool_checks` on (the default), using the Paint Bucket and the Wide Brush
+3, 5 and 10 times each are checks too. Using a tool on a patch that is already
+painted still counts as a use.
 
 ## What are the items?
 
@@ -22,7 +27,8 @@ finished colors: a quarter, half, three quarters and all of its colors.
 - **Picture N Unlocked**: opens pictures after the first.
 - **Paint Bucket**: fills a whole connected patch of one number (5 charges).
 - **Wide Brush**: paints matching cells in a 5x5 square (5 charges).
-- **Refills** add 3 charges; **Encouragement** is a kind word.
+- **Refills** add 3 charges (two of each are guaranteed with tool checks on);
+  **Encouragement** is a kind word.
 - Traps: **Smudge** erases a few painted cells, **Grayscale** hides colors for
   a while, **Number Fog** hides the numbers for a while. None undo checks.
 

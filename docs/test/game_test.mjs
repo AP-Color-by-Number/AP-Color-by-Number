@@ -105,7 +105,7 @@ for (const k of [4, 7, 10, 16, 24]) {
   // Finish color 1 on picture 1: its four checks, plus Quarter Done (1 of 4 colors).
   c0.cells.forEach((c, i) => { if (c === 0) g.apply(0, i, 0); });
   const first = g.newChecks();
-  eq(first.sort(), [...[0, 1, 2, 3].map((m) => data.colorLocationId(1, 1, m)), data.pictureLocationId(1, 0)].sort(),
+  eq(first.sort(), [...[25, 50, 75, 100].map((pct) => data.colorLocationId(1, 1, pct)), data.pictureLocationId(1, 0)].sort(),
     "color 1 checks");
   ok(first.every((id) => !g.newChecks().includes(id)), "not reported twice");
   ok(!g.reachedLocations().includes(data.pictureLocationId(1, 1)), "not half done");
@@ -153,17 +153,51 @@ for (const k of [4, 7, 10, 16, 24]) {
   eq([...partial.canvases[1].cells], [...new Game(slot).canvases[1].cells], "bad picture regenerated");
 }
 
+// -- v0.2 checks: finer percents and tool uses; v0.1 slot data still means quarters
+{
+  const v01 = new Game({ pictures: 1, colors_per_picture: 4, grid_size: 16, picture_seed: 5 });
+  eq(v01.percents, [25, 50, 75, 100], "v0.1 slot defaults to quarters");
+  ok(!v01.toolChecks, "v0.1 slot has no tool checks");
+
+  const slot = { pictures: 1, colors_per_picture: 4, grid_size: 16, picture_seed: 5,
+    color_percents: data.COLOR_CHECK_STEPS.tenths, tool_checks: true };
+  const g = new Game(slot), c = g.canvases[0];
+  g.setItems([data.colorItem(1), data.PAINT_BUCKET, data.BUCKET_REFILL, data.BUCKET_REFILL]);
+  const ones = [];
+  c.cells.forEach((v, i) => { if (v === 0) ones.push(i); });
+  // Paint just over 10% of color 1: exactly the 10% check.
+  ones.slice(0, Math.ceil(ones.length * 0.1)).forEach((i) => g.apply(0, i, 0));
+  eq(g.newChecks(), [data.colorLocationId(1, 1, 10)], "10% check");
+  ones.forEach((i) => g.apply(0, i, 0));
+  const all = g.newChecks();
+  eq(all.filter((id) => id !== data.pictureLocationId(1, 0)).sort(),
+    [20, 30, 40, 50, 60, 70, 80, 90, 100].map((pct) => data.colorLocationId(1, 1, pct)).sort(), "rest of tenths");
+  // Tool uses count on an already-painted patch, so a finished color still pays out.
+  for (let n = 0; n < 10; n++) eq(g.apply(0, ones[0], 0, "bucket").length, 0, "nothing left to paint");
+  eq(g.spent.bucket, 10, "ten uses spent");
+  eq(g.newChecks().sort(), [0, 1, 2].map((j) => data.toolLocationId("bucket", j)).sort(), "bucket use checks");
+  eq(g.charges.bucket, 1, "5 + 3 + 3 - 10 charges left");
+  eq(g.apply(0, c.cells.indexOf(1), 1, "bucket").length, 0, "wrong number: no use");
+  eq(g.spent.bucket, 10, "wrong number spends nothing");
+}
+
 // -- names and ids match the Python world
 const dump = process.argv[2];
 if (dump) {
   const t = JSON.parse(readFileSync(dump, "utf-8"));
   for (let p = 1; p <= data.MAX_PICTURES; p++) {
     for (let n = 1; n <= data.MAX_COLORS; n++) {
-      for (let m = 0; m < 4; m++) eq(t.locations[data.colorLocation(p, n, m)], data.colorLocationId(p, n, m), "color loc");
+      for (const pct of data.ALL_PERCENTS) eq(t.locations[data.colorLocation(p, n, pct)], data.colorLocationId(p, n, pct), "color loc");
     }
     for (let m = 0; m < 4; m++) eq(t.locations[data.pictureLocation(p, m)], data.pictureLocationId(p, m), "pic loc");
   }
-  eq(Object.keys(t.locations).length, data.MAX_PICTURES * (data.MAX_COLORS * 4 + 4), "location count");
+  for (const tool of ["bucket", "wide"]) {
+    data.TOOL_USES.forEach((uses, j) => eq(t.locations[data.toolLocation(tool, uses)], data.toolLocationId(tool, j), "tool loc"));
+  }
+  eq(Object.keys(t.locations).length,
+    data.MAX_PICTURES * (data.MAX_COLORS * data.ALL_PERCENTS.length + 4) + 2 * data.TOOL_USES.length, "location count");
+  eq(t.steps, data.COLOR_CHECK_STEPS, "color check steps");
+  eq([t.toolCharges, t.refillCharges, t.toolUses], [data.TOOL_CHARGES, data.REFILL_CHARGES, data.TOOL_USES], "tool numbers");
   const names = [data.PAINT_BUCKET, data.WIDE_BRUSH, data.BUCKET_REFILL, data.BRUSH_REFILL, data.ENCOURAGEMENT,
     ...data.TRAPS, data.colorItem(1), data.colorItem(24), data.canvasItem(2), data.canvasItem(10)];
   for (const name of names) ok(name in t.items, `item ${name}`);

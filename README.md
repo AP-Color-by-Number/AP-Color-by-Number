@@ -13,7 +13,7 @@ paint ones generated from your seed.
 
 ## How it plays
 
-- **Pictures**: 1-10 per seed. Picture 1 is open; the rest need "Picture N Unlocked".
+- **Pictures**: 1-20 per seed. Picture 1 is open; the rest need "Picture N Unlocked".
 - **Colors**: 4-24 per picture, shared by every picture ("Color 3" works everywhere).
   You start with a few at random.
 - **Uploads**: any image, shrunk to the seed's grid size and reduced to exactly the
@@ -21,8 +21,10 @@ paint ones generated from your seed.
   then takes whichever of your colors is closest, with a live preview.
 - **Recolor**: tap 🎨 on any color you have to change how it looks. It's cosmetic only;
   the number, its cells and its checks stay the same. "Reset colors" undoes it.
-- **Checks**: 25 / 50 / 75 / 100% of each color in each picture, plus four whole-picture
-  milestones counted in finished colors (a quarter, half, three quarters, all).
+- **Checks**: each color in each picture pays out as you paint it: every 25%, 20% or 10%
+  (the `color_checks` option). Plus four whole-picture milestones counted in finished
+  colors (a quarter, half, three quarters, all), and, with `tool_checks`, using each tool
+  3, 5 and 10 times.
   Whole-picture milestones count colors rather than cells because uploaded pictures
   are unknown at generation, so area is not something logic can promise.
 - **Tools**: Paint Bucket (fills a connected patch) and Wide Brush (5x5), 5 charges
