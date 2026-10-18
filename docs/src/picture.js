@@ -333,8 +333,55 @@ export function quantize(rgb, w, h, k, seed = 1) {
   };
 }
 
-/** Full upload pipeline from raw RGBA. */
-export function pictureFromImage(rgba, sw, sh, grid, k, seed) {
+/** Shrink raw RGBA to the grid: { rgb, w, h }, ready for quantize or mapToPalette. */
+export function prepareImage(rgba, sw, sh, grid) {
   const [w, h] = fitSize(sw, sh, grid);
-  return quantize(resample(rgba, sw, sh, w, h), w, h, k, seed);
+  return { rgb: resample(rgba, sw, sh, w, h), w, h };
+}
+
+/** Full automatic upload pipeline from raw RGBA. */
+export function pictureFromImage(rgba, sw, sh, grid, k, seed) {
+  const { rgb, w, h } = prepareImage(rgba, sw, sh, grid);
+  return quantize(rgb, w, h, k, seed);
+}
+
+/** Perceptual distance between two hex colors (OKLab, ~0..1). */
+export function colorDistance(a, b) {
+  const [L1, a1, b1] = rgbToLab(...hexRgb(a)), [L2, a2, b2] = rgbToLab(...hexRgb(b));
+  return Math.hypot(L1 - L2, a1 - a2, b1 - b2);
+}
+
+/**
+ * Map an RGB grid onto a palette the player chose: every cell takes the
+ * nearest color (OKLab). A chosen color nothing is near would have no cells,
+ * which is a check nobody could send, so it takes the cell closest to it from
+ * a color that can spare one. `counts` lets the UI flag those slivers.
+ */
+export function mapToPalette(rgb, w, h, palette) {
+  const n = w * h, k = palette.length;
+  if (n < k) throw new Error(`The picture has ${n} cells but needs at least ${k}.`);
+  const pal = palette.map((hex) => rgbToLab(...hexRgb(hex)));
+  const lab = Array.from({ length: n }, (_, i) => rgbToLab(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]));
+  const d2 = (p, c) => (p[0] - c[0]) ** 2 + (p[1] - c[1]) ** 2 + (p[2] - c[2]) ** 2;
+  const cells = new Uint8Array(n);
+  const counts = new Int32Array(k);
+  for (let i = 0; i < n; i++) {
+    let best = 0, bestD = Infinity;
+    for (let c = 0; c < k; c++) { const d = d2(lab[i], pal[c]); if (d < bestD) { bestD = d; best = c; } }
+    cells[i] = best;
+    counts[best]++;
+  }
+  for (let c = 0; c < k; c++) {
+    if (counts[c]) continue;
+    let pick = -1, pickD = Infinity;
+    for (let i = 0; i < n; i++) {
+      if (counts[cells[i]] < 2) continue;
+      const d = d2(lab[i], pal[c]);
+      if (d < pickD) { pickD = d; pick = i; }
+    }
+    counts[cells[pick]]--;
+    cells[pick] = c;
+    counts[c] = 1;
+  }
+  return { src: "upload", w, h, palette: [...palette], cells, counts: [...counts] };
 }

@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 
 import * as data from "../src/data.js";
 import { Game, validPicture } from "../src/game.js";
-import { generatePicture, pictureFromImage, quantize, rng } from "../src/picture.js";
+import { colorDistance, generatePicture, mapToPalette, pictureFromImage, prepareImage, quantize, rng } from "../src/picture.js";
 
 let checks = 0;
 const ok = (cond, msg) => { assert.ok(cond, msg); checks++; };
@@ -53,6 +53,29 @@ for (const k of [4, 7, 10, 16, 24]) {
   eq(new Set(pic.cells).size, 6, "six numbers");
   assert.throws(() => quantize(rgb, w, h, 7), /only 6 distinct/);
   checks++;
+}
+
+// -- uploads onto a chosen palette
+{
+  const rgb = Uint8ClampedArray.from([250, 0, 0, 240, 10, 10, 0, 0, 250, 10, 10, 240, 0, 240, 0, 255, 255, 255]);
+  const mine = ["#ff0000", "#0000ff", "#00ff00", "#ffffff"];
+  const pic = mapToPalette(rgb, 6, 1, mine);
+  eq([...pic.cells], [0, 0, 1, 1, 2, 3], "nearest chosen color");
+  ok(validPicture(pic, 4, 64), "mapped picture valid");
+  // A chosen color nothing is near still gets a cell, taken from a color that can spare one.
+  const lonely = mapToPalette(rgb, 6, 1, ["#ff0000", "#0000ff", "#00ff00", "#ffffff", "#ff00ff"]);
+  ok(validPicture(lonely, 5, 64), "every chosen color present");
+  eq(lonely.counts[4], 1, "sliver flagged by count");
+  // Same picture shape as the automatic route, so the dialog can switch freely.
+  const big = new Uint8ClampedArray(90 * 60 * 4).map((_, i) => (i % 4 === 3 ? 255 : (i * 37) % 256));
+  const prep = prepareImage(big, 90, 60, 30);
+  const auto = quantize(prep.rgb, prep.w, prep.h, 6, 1);
+  const chosen = mapToPalette(prep.rgb, prep.w, prep.h, auto.palette);
+  eq([chosen.w, chosen.h], [auto.w, auto.h], "same size both routes");
+  ok(validPicture(chosen, 6, 64), "auto palette remap valid");
+  assert.throws(() => mapToPalette(rgb, 6, 1, new Array(7).fill("#000000")), /needs at least 7/);
+  checks++;
+  ok(colorDistance("#ff0000", "#ff0000") === 0 && colorDistance("#000000", "#ffffff") > 0.9, "distance");
 }
 
 // -- play: items gate paint, tools spend charges, checks and goal
@@ -101,12 +124,28 @@ for (const k of [4, 7, 10, 16, 24]) {
   ok(hit.length >= 4 && hit.every((i) => !g.canvases[sp].painted[i]), "smudge unpaints");
   ok(!g.goalMet, "smudged picture is no longer complete");
 
+  // Recolor is cosmetic and survives the save; reset goes back.
+  const before = g.reachedLocations().length;
+  ok(g.recolor(0, 2, "#ABCDEF"), "recolor");
+  eq(g.canvases[0].palette[2], "#abcdef", "recolor lowercases");
+  ok(!g.recolor(0, 2, "red") && !g.recolor(0, 9, "#000000"), "bad recolor refused");
+  ok(g.canvases[0].recolored, "marked recolored");
+  eq(g.reachedLocations().length, before, "recolor changes no checks");
+
   // Save round trip.
   const saved = JSON.parse(JSON.stringify(g.toPayload()));
   const back = new Game(slot);
   ok(back.load(saved), "load");
   eq(back.canvases.map((c) => [...c.painted]), g.canvases.map((c) => [...c.painted]), "painted restored");
   eq(back.spent, g.spent, "spent restored");
+  eq(back.canvases[0].palette[2], "#abcdef", "recolor restored");
+  back.resetColors(0);
+  eq(back.canvases[0].palette, g.canvases[0].orig, "reset to original");
+  ok(!back.canvases[0].recolored, "reset clears recolored");
+  const old = JSON.parse(JSON.stringify(saved));
+  old.pictures.forEach((x) => delete x.orig);
+  const legacy = new Game(slot);
+  ok(legacy.load(old) && !legacy.canvases[0].recolored, "pre-recolor saves load");
   ok(!new Game({ ...slot, picture_seed: 5 }).load(saved), "other seed rejected");
   saved.pictures[1].cells = "AAAA";
   const partial = new Game(slot);

@@ -67,11 +67,14 @@
       <div class="group">
         <label class="button" title="Use your own image for this picture">⬆️ Upload image<input id="upload" type="file" accept="image/*" hidden></label>
         <button id="regen" title="Go back to this picture's generated image">Generated</button>
+        <button id="reset-colors" title="Undo your recoloring of this picture">Reset colors</button>
       </div>
     </div>
 
     <div id="progress" class="progress"></div>
     <div id="palette" class="palette" aria-label="Colors"></div>
+    <p class="hint">Tap 🎨 on a color to recolor it. It's only for looks: the number, its cells and its checks stay the same.</p>
+    <input id="recolor" class="offscreen" type="color" tabindex="-1" aria-hidden="true">
 
     <details id="logbox" class="log" open>
       <summary>Log</summary>
@@ -81,6 +84,26 @@
 
   <footer class="credits">Inspired by an idea from Discord user <strong>Dratini64</strong> ·
     <a href="https://github.com/lighting8282/AP-Color-by-Number">GitHub</a></footer>
+
+  <dialog id="upload-dialog" class="upload-dialog">
+    <form method="dialog">
+      <h2 id="upload-title">Upload</h2>
+      <div class="modes" role="radiogroup" aria-label="Colors">
+        <label><input type="radio" name="upload-mode" value="auto" checked> Automatic colors</label>
+        <label><input type="radio" name="upload-mode" value="mine"> Choose my colors</label>
+      </div>
+      <p id="upload-mode-hint" class="hint"></p>
+      <div class="upload-body">
+        <canvas id="upload-preview"></canvas>
+        <div id="upload-colors" class="upload-colors"></div>
+      </div>
+      <p id="upload-warn" class="warn-text"></p>
+      <div class="dialog-buttons">
+        <button value="cancel" formnovalidate>Cancel</button>
+        <button id="upload-use" value="use" class="primary">Use this picture</button>
+      </div>
+    </form>
+  </dialog>
 
   <div id="toast" class="toast" role="status" hidden></div>
 

@@ -17,7 +17,10 @@ paint ones generated from your seed.
 - **Colors**: 4-24 per picture, shared by every picture ("Color 3" works everywhere).
   You start with a few at random.
 - **Uploads**: any image, shrunk to the seed's grid size and reduced to exactly the
-  seed's color count (k-means in OKLab). Images with too few distinct colors are refused.
+  seed's color count. Let the game pick the colors, or choose your own: every cell
+  then takes whichever of your colors is closest, with a live preview.
+- **Recolor**: tap 🎨 on any color you have to change how it looks. It's cosmetic only;
+  the number, its cells and its checks stay the same. "Reset colors" undoes it.
 - **Checks**: 25 / 50 / 75 / 100% of each color in each picture, plus four whole-picture
   milestones counted in finished colors (a quarter, half, three quarters, all).
   Whole-picture milestones count colors rather than cells because uploaded pictures

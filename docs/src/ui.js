@@ -3,7 +3,7 @@
 
 import { CbnClient } from "./client.js";
 import { canvasItem, colorItem } from "./data.js";
-import { lightness, pictureFromImage } from "./picture.js";
+import { colorDistance, lightness, mapToPalette, oklchHex, prepareImage, quantize } from "./picture.js";
 
 const $ = (id) => document.getElementById(id);
 const canvasEl = $("canvas");
@@ -107,20 +107,143 @@ $("upload").addEventListener("change", async (event) => {
   const file = event.target.files[0];
   event.target.value = "";
   if (!file) return;
-  const g = cbn.game, p = view.picture;
-  if (g.canvases[p].anyPainted && !confirm(`Replace Picture ${p + 1}? Its paint is cleared (checks already sent stay sent).`)) return;
   try {
-    toast("Reducing the image to " + g.k + " colors…");
     const { rgba, w, h } = await readImage(file);
-    const pic = pictureFromImage(rgba, w, h, g.grid, g.k, g.seed + p);
-    cbn.replacePicture(p, pic);
-    log(`Picture ${p + 1} now uses ${file.name} (${pic.w}×${pic.h}).`, "info");
-    view.zoom = null;
-    render();
-    toast("Image ready. Happy painting!");
+    openUploadDialog(file.name, prepareImage(rgba, w, h, cbn.game.grid));
   } catch (err) {
-    toast(err.message ?? String(err));
+    toast(`Could not read that image: ${err.message ?? err}`);
   }
+});
+
+// -- upload dialog ------------------------------------------------------------------------
+// Two routes to the same kind of picture: automatic (k-means picks the colors)
+// or the player's own colors (every cell takes the nearest one). Choosing
+// starts from the automatic colors, so it is tweaking rather than a blank slate.
+const upload = { name: "", prep: null, auto: null, autoError: "", mine: [], pic: null };
+
+function openUploadDialog(name, prep) {
+  const g = cbn.game;
+  upload.name = name;
+  upload.prep = prep;
+  try {
+    upload.auto = quantize(prep.rgb, prep.w, prep.h, g.k, g.seed + view.picture);
+    upload.autoError = "";
+  } catch (err) {
+    upload.auto = null;
+    upload.autoError = err.message;
+  }
+  // No automatic colors (too few distinct ones): start from an even spread of hues.
+  upload.mine = upload.auto ? [...upload.auto.palette]
+    : Array.from({ length: g.k }, (_, i) => oklchHex([0.5, 0.7, 0.85][i % 3], 0.14, (i * 360) / g.k));
+  setUploadMode(upload.auto ? "auto" : "mine");
+  $("upload-title").textContent = `Picture ${view.picture + 1}: ${name}`;
+  $("upload-dialog").showModal();
+}
+
+function uploadMode() {
+  return document.querySelector('input[name="upload-mode"]:checked').value;
+}
+
+function setUploadMode(mode) {
+  document.querySelector(`input[name="upload-mode"][value="${mode}"]`).checked = true;
+  document.querySelector('input[name="upload-mode"][value="auto"]').disabled = !upload.auto;
+  renderUploadColors();
+  refreshUpload();
+}
+
+for (const radio of document.querySelectorAll('input[name="upload-mode"]')) {
+  radio.addEventListener("change", () => setUploadMode(radio.value));
+}
+
+function renderUploadColors() {
+  const mine = uploadMode() === "mine";
+  const palette = mine ? upload.mine : upload.auto.palette;
+  $("upload-mode-hint").textContent = mine
+    ? "Pick a color for each number. Every cell takes whichever of your colors is closest."
+    : upload.autoError || "The game picks the colors that best fit your image. Switch to choose your own.";
+  $("upload-colors").replaceChildren(...palette.map((hex, n) => {
+    const label = document.createElement("label");
+    const input = Object.assign(document.createElement("input"), { type: "color", value: hex, disabled: !mine });
+    input.setAttribute("aria-label", `Color ${n + 1}`);
+    input.addEventListener("input", () => { upload.mine[n] = input.value; refreshUpload(); });
+    const count = Object.assign(document.createElement("span"), { className: "count" });
+    label.append(input, `${n + 1}`, count);
+    return label;
+  }));
+}
+
+function refreshUpload() {
+  const { prep } = upload;
+  upload.pic = uploadMode() === "mine" ? mapToPalette(prep.rgb, prep.w, prep.h, upload.mine) : upload.auto;
+  const pic = upload.pic;
+  const counts = new Array(pic.palette.length).fill(0);
+  pic.cells.forEach((c) => counts[c]++);
+  const thin = Math.max(2, Math.floor(pic.cells.length / (pic.palette.length * 20)));
+  document.querySelectorAll("#upload-colors .count").forEach((el, n) => {
+    el.textContent = `${counts[n]}`;
+    el.title = `${counts[n]} cells`;
+    el.classList.toggle("thin", counts[n] <= thin);
+  });
+  const warnings = [];
+  const slivers = counts.map((c, n) => (c <= thin ? n + 1 : 0)).filter(Boolean);
+  if (slivers.length) warnings.push(`Barely used: ${slivers.join(", ")}. Those numbers will only be a few cells.`);
+  const twins = similarPairs(pic.palette);
+  if (twins.length) warnings.push(`Hard to tell apart: ${twins.map(([a, b]) => `${a + 1} & ${b + 1}`).join(", ")}.`);
+  $("upload-warn").textContent = warnings.join(" ");
+
+  const preview = $("upload-preview");
+  preview.width = pic.w;
+  preview.height = pic.h;
+  const pctx = preview.getContext("2d");
+  const img = pctx.createImageData(pic.w, pic.h);
+  const rgb = pic.palette.map((hex) => [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16)));
+  pic.cells.forEach((c, i) => img.data.set([...rgb[c], 255], i * 4));
+  pctx.putImageData(img, 0, 0);
+}
+
+function similarPairs(palette) {
+  const out = [];
+  for (let a = 0; a < palette.length; a++) {
+    for (let b = a + 1; b < palette.length; b++) if (colorDistance(palette[a], palette[b]) < 0.04) out.push([a, b]);
+  }
+  return out;
+}
+
+// Applied on submit, which fires at once and names its button. Cancel and
+// Escape never submit, so neither can apply a picture.
+$("upload-dialog").querySelector("form").addEventListener("submit", (event) => {
+  if (event.submitter?.value !== "use" || !upload.pic) return;
+  const p = view.picture, canvas = cbn.game.canvases[p];
+  if (canvas.anyPainted && !confirm(`Replace Picture ${p + 1}? Its paint is cleared (checks already sent stay sent).`)) return;
+  const { counts, ...pic } = upload.pic;
+  cbn.replacePicture(p, pic);
+  const how = uploadMode() === "mine" ? "your colors" : "automatic colors";
+  log(`Picture ${p + 1} now uses ${upload.name} (${pic.w}×${pic.h}, ${how}).`, "info");
+  view.zoom = null;
+  render();
+  toast("Image ready. Happy painting!");
+});
+
+$("reset-colors").addEventListener("click", () => {
+  cbn.resetColors(view.picture);
+  render();
+});
+
+// One color input shared by every swatch's recolor button.
+let recolorTarget = null;
+$("recolor").addEventListener("input", () => {
+  if (recolorTarget === null) return;
+  cbn.recolor(view.picture, recolorTarget, $("recolor").value);
+  drawAll();
+  renderPalette();
+});
+$("recolor").addEventListener("change", () => {
+  if (recolorTarget === null) return;
+  const c = currentCanvas(), n = recolorTarget;
+  const twin = c.palette.findIndex((hex, m) => m !== n && colorDistance(hex, c.palette[n]) < 0.04);
+  if (twin >= 0) toast(`${colorItem(n + 1)} now looks a lot like ${colorItem(twin + 1)}.`);
+  recolorTarget = null;
+  render();
 });
 
 $("regen").addEventListener("click", () => {
@@ -311,6 +434,7 @@ function render() {
   $("locked-name").textContent = canvasItem(view.picture + 1);
   $("upload").disabled = locked;
   $("regen").disabled = locked || currentCanvas().src === "gen";
+  $("reset-colors").disabled = locked || !currentCanvas().recolored;
   drawAll();
 }
 
@@ -375,6 +499,7 @@ function renderPalette() {
     bar.className = "bar";
     bar.innerHTML = `<i style="width:${(100 * c.done[n]) / c.total[n]}%"></i>`;
     b.append(chip, bar);
+    b.classList.toggle("recolored-color", hex !== c.orig[n]);
     b.addEventListener("click", () => {
       if (!owned) { toast(`${colorItem(n + 1)} hasn't been sent to you yet.`); return; }
       view.color = n;
@@ -383,7 +508,22 @@ function renderPalette() {
       renderPalette();
       drawAll();
     });
-    return b;
+    const wrap = document.createElement("div");
+    wrap.className = "swatch-wrap";
+    wrap.append(b);
+    // Only colors you have: a locked color's look is not shown yet.
+    if (owned && g.unlocked.has(view.picture)) {
+      const edit = Object.assign(document.createElement("button"), { className: "recolor-btn", textContent: "🎨" });
+      edit.title = `Recolor ${colorItem(n + 1)}`;
+      edit.setAttribute("aria-label", edit.title);
+      edit.addEventListener("click", () => {
+        recolorTarget = n;
+        $("recolor").value = hex;
+        $("recolor").click();
+      });
+      wrap.append(edit);
+    }
+    return wrap;
   }));
 }
 

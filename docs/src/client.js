@@ -179,6 +179,15 @@ export class CbnClient {
     this.scheduleSave(true);
   }
 
+  recolor(p, n, hex) {
+    if (this.game.recolor(p, n, hex)) this.scheduleSave();
+  }
+
+  resetColors(p) {
+    this.game.resetColors(p);
+    this.scheduleSave(true);
+  }
+
   regeneratePicture(p) {
     this.game.regeneratePicture(p);
     this.scheduleSave(true);

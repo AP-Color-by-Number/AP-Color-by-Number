@@ -52,7 +52,11 @@ export class Canvas {
   }
 
   setPicture(pic, painted = null) {
-    Object.assign(this, { src: pic.src, w: pic.w, h: pic.h, palette: pic.palette, cells: pic.cells });
+    Object.assign(this, { src: pic.src, w: pic.w, h: pic.h, cells: pic.cells });
+    // `orig` is what Reset colors goes back to: the generated colors, or the
+    // ones the picture was uploaded with. `palette` is what is on screen.
+    this.orig = [...(pic.orig ?? pic.palette)];
+    this.palette = [...pic.palette];
     this.painted = painted ?? new Uint8Array(pic.cells.length);
     this.total = new Int32Array(this.k);
     this.done = new Int32Array(this.k);
@@ -60,6 +64,10 @@ export class Canvas {
       this.total[c]++;
       if (this.painted[i]) this.done[c]++;
     });
+  }
+
+  get recolored() {
+    return this.palette.some((hex, i) => hex !== this.orig[i]);
   }
 
   get anyPainted() {
@@ -118,7 +126,7 @@ export class Canvas {
 
   toPayload() {
     return {
-      src: this.src, w: this.w, h: this.h, palette: this.palette,
+      src: this.src, w: this.w, h: this.h, palette: this.palette, orig: this.orig,
       cells: toBase64(this.cells), painted: toBase64(packBits(this.painted)),
     };
   }
@@ -244,6 +252,18 @@ export class Game {
     this.canvases[p].setPicture(pic);
   }
 
+  /** Cosmetic only: Color n keeps its number, cells and checks. */
+  recolor(p, n, hex) {
+    if (!/^#[0-9a-f]{6}$/i.test(hex) || n < 0 || n >= this.k) return false;
+    this.canvases[p].palette[n] = hex.toLowerCase();
+    return true;
+  }
+
+  resetColors(p) {
+    const c = this.canvases[p];
+    c.palette = [...c.orig];
+  }
+
   regeneratePicture(p) {
     this.canvases[p].setPicture(generatePicture(this.seed, p + 1, this.grid, this.k));
   }
@@ -274,6 +294,8 @@ export class Game {
         const pic = { src: saved.src === "upload" ? "upload" : "gen", w: saved.w, h: saved.h,
           palette: saved.palette, cells: fromBase64(saved.cells) };
         if (!validPicture(pic, this.k, Math.max(this.grid, 64))) return;
+        // Saves from before recoloring have no orig; then the palette is it.
+        if (validPicture({ ...pic, palette: saved.orig }, this.k, Math.max(this.grid, 64))) pic.orig = saved.orig;
         canvas.setPicture(pic, unpackBits(fromBase64(saved.painted), pic.cells.length));
       } catch { /* keep the generated picture */ }
     });
