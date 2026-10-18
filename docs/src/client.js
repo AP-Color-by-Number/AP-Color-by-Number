@@ -41,6 +41,7 @@ export class CbnClient {
     this.client.messages.on("message", (text) => this.hooks.onLog(text, "room"));
     this.client.socket.on("disconnected", () => {
       this.connected = false;
+      if (!this.game) return; // we left on purpose
       this.hooks.onLog("Disconnected from the server.", "warn");
       this.hooks.onUpdate();
     });
@@ -181,6 +182,18 @@ export class CbnClient {
   regeneratePicture(p) {
     this.game.regeneratePicture(p);
     this.scheduleSave(true);
+  }
+
+  /** Back to the front page: save what is pending first, then drop the room. */
+  async leave() {
+    clearTimeout(this.saveTimer);
+    await this.save();
+    const wasConnected = this.connected;
+    this.connected = false;
+    this.offline = false;
+    this.restored = false;
+    this.game = null;
+    if (wasConnected) this.client.socket.disconnect();
   }
 
   // -- save --------------------------------------------------------------------------

@@ -69,6 +69,21 @@ $("offline-form").addEventListener("submit", (event) => {
   showGame();
 });
 
+// The title goes back to the front page. Done in-page rather than by
+// following the link, so the last few strokes are saved before leaving.
+$("home").addEventListener("click", async (event) => {
+  event.preventDefault();
+  if (!cbn.game) return;
+  if (cbn.connected && !confirm("Leave this game and go back to the front page? Your painting is saved.")) return;
+  await cbn.leave();
+  $("game").hidden = true;
+  $("connect").hidden = false;
+  $("log").replaceChildren();
+  view.effects = { grayscale: 0, fog: 0 };
+  tickEffects();
+  render();
+});
+
 function showGame() {
   $("connect").hidden = true;
   $("game").hidden = false;
