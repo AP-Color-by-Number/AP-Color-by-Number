@@ -29,3 +29,11 @@ finished colors: a quarter, half, three quarters and all of its colors.
 ## What is the goal?
 
 Finish every picture.
+
+## Where do I play?
+
+In the browser: https://ap-color-by-number.github.io/AP-Color-by-Number/
+
+## Credits
+
+Inspired by a game proposal from Discord user **Dratini64**.
