@@ -45,10 +45,7 @@ button, input, .button { font: inherit; color: inherit; }
 }
 .top h1 { margin: 0; font-size: 18px; display: flex; align-items: center; gap: 8px; }
 .top h1 small { color: var(--muted); font-weight: 500; }
-.logo {
-  width: 20px; height: 20px; border-radius: 4px;
-  background: conic-gradient(#d84545 0 60deg, #5df255 0 120deg, #ffffff 0 180deg, #dc7c2b 0 240deg, #3e7fdf 0 300deg, #e3d36a 0);
-}
+.logo { width: 28px; height: 28px; }
 .status { color: var(--muted); font-size: 13px; }
 .status.on { color: var(--good); }
 

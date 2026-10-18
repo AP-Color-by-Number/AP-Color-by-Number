@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/logo.png" alt="Color by Number AP logo" width="200"></p>
+
 # Color by Number AP
 
 A relaxing color-by-number for [Archipelago](https://archipelago.gg). Every numbered
