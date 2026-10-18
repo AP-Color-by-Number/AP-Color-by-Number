@@ -33,5 +33,5 @@ Progress (pictures, paint, spent charges) is saved in the server's data storage 
 
 ## Credits
 
-- **Dratini64** (Discord): inspiration: the original idea and design proposal.
+- **Dratini64** (Discord): the original idea and design proposal that inspired this game.
 - [archipelago.js](https://github.com/ThePhar/archipelago.js) (MIT) for the server connection.
