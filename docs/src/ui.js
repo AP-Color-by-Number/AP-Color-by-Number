@@ -1,9 +1,9 @@
 // DOM layer: the canvas, palette, tools and forms. Reads CbnClient + Game,
 // never changes game state except through them.
 
-import { CbnClient } from "./client.js?v=1953652d";
-import { TOOL_USES, canvasItem, colorItem } from "./data.js?v=1953652d";
-import { colorDistance, lightness, mapToPalette, oklchHex, prepareImage, quantize } from "./picture.js?v=1953652d";
+import { CbnClient } from "./client.js?v=3f81dec2";
+import { TOOL_USES, canvasItem, colorItem } from "./data.js?v=3f81dec2";
+import { colorDistance, lightness, mapToPalette, oklchHex, prepareImage, quantize } from "./picture.js?v=3f81dec2";
 
 const $ = (id) => document.getElementById(id);
 const canvasEl = $("canvas");
@@ -569,18 +569,26 @@ function tickEffects() {
 // past every cache and offer a reload when it differs from the running one.
 const RUNNING_BUILD = (document.querySelector('meta[name="build"]')?.content ?? "").replace("?v=", "");
 
+let liveBuild = "";
+
 async function checkForUpdate() {
   if (!RUNNING_BUILD) return; // unstamped dev copy
   try {
     const response = await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" });
     const { build } = await response.json();
-    if (build && build !== RUNNING_BUILD) $("update-banner").hidden = false;
+    if (build && build !== RUNNING_BUILD) {
+      liveBuild = build;
+      $("update-banner").hidden = false;
+    }
   } catch { /* offline or blocked: keep playing */ }
 }
 
 $("update-reload").addEventListener("click", async () => {
   if (cbn.game) await cbn.leave(); // flush the save first
-  location.reload();
+  // index.html is cached for ten minutes under its own URL, so a plain reload
+  // can bring back the very page we are leaving. A URL naming the new build
+  // has never been cached.
+  location.replace(`${location.pathname}?v=${liveBuild}`);
 });
 checkForUpdate();
 setInterval(checkForUpdate, 5 * 60 * 1000);

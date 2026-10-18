@@ -4,8 +4,8 @@
 import {
   BRUSH_REFILL, BUCKET_REFILL, DEFAULT_PERCENTS, PAINT_BUCKET, PICTURE_MILESTONES, REFILL_CHARGES, TOOL_CHARGES,
   TOOL_USES, WIDE_BRUSH, canvasItem, colorItem, colorLocationId, colorsForMilestone, pictureLocationId, toolLocationId,
-} from "./data.js?v=1953652d";
-import { generatePicture } from "./picture.js?v=1953652d";
+} from "./data.js?v=3f81dec2";
+import { generatePicture } from "./picture.js?v=3f81dec2";
 
 export const SAVE_VERSION = 1;
 export const WIDE_RADIUS = 2; // 5x5
