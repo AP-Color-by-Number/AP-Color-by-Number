@@ -4,18 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Color by Number AP</title>
-  <meta name="build" content="?v=3f81dec2">
+  <meta name="build" content="?v=69ac5b50">
   <meta name="description" content="A color-by-number game for Archipelago: every numbered color is an item.">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
   <link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <meta property="og:image" content="https://ap-color-by-number.github.io/AP-Color-by-Number/assets/icon-512.png">
-  <link rel="stylesheet" href="style.css?v=3f81dec2">
+  <link rel="stylesheet" href="style.css?v=69ac5b50">
 </head>
 <body>
   <header class="top">
     <h1><a id="home" href="./" title="Back to the front page"><img class="logo" src="assets/icon-512.png" alt="" width="28" height="28">Color by Number <small>AP</small></a></h1>
-    <span id="status" class="status">Not connected</span>
+    <div class="top-right">
+      <span id="status" class="status">Not connected</span>
+      <div class="sound" role="group" aria-label="Sound">
+        <button id="sound-toggle" class="icon-btn" aria-pressed="true">🔊</button>
+        <input id="volume" type="range" min="0" max="100" step="5" aria-label="Volume">
+      </div>
+    </div>
   </header>
 
   <div id="update-banner" class="update-banner" role="alert" hidden>
@@ -113,6 +119,6 @@
 
   <div id="toast" class="toast" role="status" hidden></div>
 
-  <script type="module" src="src/ui.js?v=3f81dec2"></script>
+  <script type="module" src="src/ui.js?v=69ac5b50"></script>
 </body>
 </html>

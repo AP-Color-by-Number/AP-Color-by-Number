@@ -49,6 +49,11 @@ button, input, .button { font: inherit; color: inherit; }
 .top h1 small { color: var(--muted); font-weight: 500; }
 .logo { width: 28px; height: 28px; }
 .status { color: var(--muted); font-size: 13px; }
+.top-right { display: flex; align-items: center; gap: 12px; }
+.sound { display: flex; align-items: center; gap: 4px; }
+.icon-btn { padding: 4px 8px; font-size: 16px; line-height: 1; }
+.sound input[type="range"] { width: 90px; padding: 0; border: 0; background: none; accent-color: var(--accent); }
+@media (max-width: 480px) { .sound input[type="range"] { width: 60px; } .status { display: none; } }
 .status.on { color: var(--good); }
 
 .panel {

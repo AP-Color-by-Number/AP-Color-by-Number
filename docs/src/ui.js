@@ -1,9 +1,10 @@
 // DOM layer: the canvas, palette, tools and forms. Reads CbnClient + Game,
 // never changes game state except through them.
 
-import { CbnClient } from "./client.js?v=3f81dec2";
-import { TOOL_USES, canvasItem, colorItem } from "./data.js?v=3f81dec2";
-import { colorDistance, lightness, mapToPalette, oklchHex, prepareImage, quantize } from "./picture.js?v=3f81dec2";
+import { play, setMuted, setVolume, soundSettings } from "./sound.js?v=69ac5b50";
+import { CbnClient } from "./client.js?v=69ac5b50";
+import { TOOL_USES, canvasItem, colorItem } from "./data.js?v=69ac5b50";
+import { colorDistance, lightness, mapToPalette, oklchHex, prepareImage, quantize } from "./picture.js?v=69ac5b50";
 
 const $ = (id) => document.getElementById(id);
 const canvasEl = $("canvas");
@@ -22,6 +23,7 @@ const cbn = new CbnClient({
   onUpdate: () => render(),
   onCells: (p, cells) => { if (p === view.picture) cells.forEach(drawCell); renderPalette(); renderTabs(); },
   onLog: (text, kind) => log(text, kind),
+  onSound: (name) => play(name),
   onEffect: (name, seconds) => {
     view.effects[name] = Date.now() + seconds * 1000;
     tickEffects();
@@ -383,11 +385,18 @@ function paintCell(i) {
     // Used on a patch that was already done: still a use, so show it.
     renderTools();
     renderProgress();
+    play(cbn.lastSent ? "check" : "tap");
     toast("Already painted, but that still counts as a use.");
   } else if (cells.length) {
     renderPalette();
     renderProgress();
-    if (c.done[view.color] === c.total[view.color]) {
+    // One sound per action, the biggest thing that just happened.
+    const colorDone = c.done[view.color] === c.total[view.color];
+    if (c.complete) play("fanfare");
+    else if (colorDone) play("chime");
+    else if (cbn.lastSent) play("check");
+    else play(view.tool === "brush" ? "tap" : "whoosh");
+    if (colorDone) {
       log(`${colorItem(view.color + 1)} finished on Picture ${view.picture + 1}!`, "good");
       selectNextColor();
       drawAll();
@@ -561,6 +570,26 @@ function tickEffects() {
   if (parts.length) effectTimer = setTimeout(tickEffects, 1000);
   else if (cbn.game) { drawAll(); renderPalette(); }
 }
+
+// -- sound controls -------------------------------------------------------------------------
+function renderSound() {
+  const { muted, volume } = soundSettings();
+  const off = muted || volume === 0;
+  $("sound-toggle").textContent = off ? "🔇" : "🔊";
+  $("sound-toggle").setAttribute("aria-pressed", String(!off));
+  $("sound-toggle").title = off ? "Sound off (click to turn on)" : "Sound on (click to mute)";
+  $("volume").value = String(Math.round(volume * 100));
+}
+$("sound-toggle").addEventListener("click", () => {
+  const { muted, volume } = soundSettings();
+  if (volume === 0) setVolume(0.6);
+  else setMuted(!muted);
+  renderSound();
+  play("check"); // so you hear what you turned on
+});
+$("volume").addEventListener("input", () => { setVolume(Number($("volume").value) / 100); renderSound(); });
+$("volume").addEventListener("change", () => play("chime"));
+renderSound();
 
 // -- stale tab check ---------------------------------------------------------------------
 // A tab left open across a deploy keeps running the code it loaded, which

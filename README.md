@@ -32,6 +32,8 @@ paint ones generated from your seed.
 - **Traps** (none undo checks, none reset the picture): Smudge erases a few painted
   cells, Grayscale hides the colors for 45 s, Number Fog hides the numbers for 45 s.
 - **Goal**: finish every picture.
+- **Sound**: soft synthesized effects for painting, tools, checks, received items, traps and
+  finished colors/pictures. Mute and volume are in the top bar.
 
 Progress (pictures, paint, spent charges) is saved in the server's data storage under
 `cbn_<team>_<slot>`, so it follows the slot to any device.

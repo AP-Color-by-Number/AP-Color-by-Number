@@ -4,13 +4,13 @@
 // follows the slot to any device. Nothing is saved until the restore has
 // landed, or the freshly generated pictures would overwrite real progress.
 
-import { Client } from "../node_modules/archipelago.js/dist/index.js?v=3f81dec2";
+import { Client } from "../node_modules/archipelago.js/dist/index.js?v=69ac5b50";
 
 import {
   ENCOURAGEMENT, ENCOURAGEMENTS, FOG_TRAP, GAME_NAME, GRAYSCALE_TRAP, SMUDGE_TRAP, canvasItem, colorItem,
-} from "./data.js?v=3f81dec2";
-import { Game } from "./game.js?v=3f81dec2";
-import { rng } from "./picture.js?v=3f81dec2";
+} from "./data.js?v=69ac5b50";
+import { Game } from "./game.js?v=69ac5b50";
+import { rng } from "./picture.js?v=69ac5b50";
 
 const OFFLINE_KEY = "cbn_offline";
 const SAVE_DELAY_MS = 1500;
@@ -22,7 +22,8 @@ export class CbnClient {
    * onLog(text, kind) add a log line, onEffect(name, seconds) a timed trap.
    */
   constructor(hooks = {}) {
-    this.hooks = { onUpdate() {}, onCells() {}, onLog() {}, onEffect() {}, ...hooks };
+    this.hooks = { onUpdate() {}, onCells() {}, onLog() {}, onEffect() {}, onSound() {}, ...hooks };
+    this.lastSent = 0; // checks the most recent afterPaint sent, for the UI's sound
     this.client = new Client();
     this.game = null;
     this.connected = false;
@@ -113,8 +114,14 @@ export class CbnClient {
     const before = { colors: new Set(this.game.colors), unlocked: new Set(this.game.unlocked) };
     this.game.setItems(this.receivedNames());
     if (this.connected) {
-      for (const c of this.game.colors) if (!before.colors.has(c)) this.hooks.onLog(`${colorItem(c + 1)} received!`, "good");
-      for (const p of this.game.unlocked) if (!before.unlocked.has(p)) this.hooks.onLog(`${canvasItem(p + 1)}!`, "good");
+      let news = false;
+      for (const c of this.game.colors) {
+        if (!before.colors.has(c)) { this.hooks.onLog(`${colorItem(c + 1)} received!`, "good"); news = true; }
+      }
+      for (const p of this.game.unlocked) {
+        if (!before.unlocked.has(p)) { this.hooks.onLog(`${canvasItem(p + 1)}!`, "good"); news = true; }
+      }
+      if (news) this.hooks.onSound("item");
     }
     if (this.restored) this.handleNewItems();
     this.hooks.onUpdate();
@@ -126,8 +133,10 @@ export class CbnClient {
     const g = this.game;
     if (g.handled >= names.length) return;
     const rand = rng(Date.now() & 0x7fffffff);
+    let trapped = false;
     for (let i = g.handled; i < names.length; i++) {
       const name = names[i];
+      if ([SMUDGE_TRAP, GRAYSCALE_TRAP, FOG_TRAP].includes(name)) trapped = true;
       if (name === SMUDGE_TRAP) {
         const [p, cells] = g.smudge(rand, this.currentPicture);
         this.hooks.onLog(cells.length ? `Smudge Trap! ${cells.length} cells on Picture ${p + 1} need repainting.`
@@ -144,6 +153,7 @@ export class CbnClient {
       }
     }
     g.handled = names.length;
+    if (trapped) this.hooks.onSound("trap");
     this.scheduleSave(true);
   }
 
@@ -163,11 +173,13 @@ export class CbnClient {
     const g = this.game;
     if (!g) return;
     let sent = false;
+    this.lastSent = 0;
     if (this.connected && this.restored) {
       const fresh = g.newChecks();
       if (fresh.length) {
         this.client.check(...fresh);
         sent = true;
+        this.lastSent = fresh.length;
       }
       if (g.goalMet && !this.goalSent) {
         this.client.goal();
