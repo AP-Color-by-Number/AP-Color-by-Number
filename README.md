@@ -8,7 +8,7 @@ color is an item: until someone sends you **Color 7**, the 7s stay blank.
 **Play: https://lighting8282.github.io/AP-Color-by-Number/** -- get the apworld and a
 template yaml from the [latest release](https://github.com/lighting8282/AP-Color-by-Number/releases/latest).
 
-Based on a community proposal. Plays in the browser; upload your own pictures or
+Inspired by a game proposal from Discord user **Dratini64**. Plays in the browser; upload your own pictures or
 paint ones generated from your seed.
 
 ## How it plays
@@ -30,3 +30,8 @@ paint ones generated from your seed.
 
 Progress (pictures, paint, spent charges) is saved in the server's data storage under
 `cbn_<team>_<slot>`, so it follows the slot to any device.
+
+## Credits
+
+- **Dratini64** (Discord): inspiration: the original idea and design proposal.
+- [archipelago.js](https://github.com/ThePhar/archipelago.js) (MIT) for the server connection.
