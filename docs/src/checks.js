@@ -11,7 +11,7 @@
 import {
   PICTURE_MILESTONES, TOOL_USES, canvasItem, colorItem, colorLocation, colorLocationId, colorsForMilestone,
   pictureLocation, pictureLocationId, toolLocation, toolLocationId, TOOL_NAMES,
-} from "./data.js?v=9c4867e0";
+} from "./data.js?v=99501e74";
 
 export const SHORT_MILESTONES = ["¼", "½", "¾", "All"];
 

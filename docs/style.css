@@ -10,6 +10,7 @@
   --bad: #c2412d;
   --warn: #a86b00;
   --shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+  --pattern-opacity: 0.08;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -25,6 +26,7 @@
     --bad: #ff8a73;
     --warn: #e0b04f;
     --shadow: none;
+    --pattern-opacity: 0.07;
     color-scheme: dark;
   }
 }
@@ -38,6 +40,15 @@ body {
 }
 button, input, .button { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
+
+/* The logo as a faint, staggered pattern behind everything. Fixed, so it stays
+   put while the page scrolls; panels keep their solid backgrounds, so it only
+   shows in the gaps and never behind the numbers. */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: url("assets/bg-tile.png") repeat; background-size: 220px 220px;
+  opacity: var(--pattern-opacity);
+}
 
 .top {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;

@@ -1,13 +1,13 @@
 // DOM layer: the canvas, palette, tools and forms. Reads CbnClient + Game,
 // never changes game state except through them.
 
-import { play, setMuted, setVolume, soundSettings } from "./sound.js?v=9c4867e0";
-import { CbnClient } from "./client.js?v=9c4867e0";
-import { checkModel } from "./checks.js?v=9c4867e0";
-import { TOOL_USES, canvasItem, colorItem } from "./data.js?v=9c4867e0";
+import { play, setMuted, setVolume, soundSettings } from "./sound.js?v=99501e74";
+import { CbnClient } from "./client.js?v=99501e74";
+import { checkModel } from "./checks.js?v=99501e74";
+import { TOOL_USES, canvasItem, colorItem } from "./data.js?v=99501e74";
 import {
   CROP_ASPECTS, colorDistance, cropRect, cropRgba, lightness, mapToPalette, oklchHex, prepareImage, quantize,
-} from "./picture.js?v=9c4867e0";
+} from "./picture.js?v=99501e74";
 
 const $ = (id) => document.getElementById(id);
 const canvasEl = $("canvas");
