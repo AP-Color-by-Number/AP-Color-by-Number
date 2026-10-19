@@ -19,7 +19,9 @@ finished colors: a quarter, half, three quarters and all of its colors.
 
 With `tool_checks` on (the default), using the Paint Bucket and the Wide Brush
 3, 5 and 10 times each are checks too. Using a tool on a patch that is already
-painted still counts as a use.
+painted still counts as a use. With `tool_check_rewards: filler_only` (the
+default) those checks only ever hold filler or traps, so skipping the tools can
+never hold anyone up.
 
 ## What are the items?
 

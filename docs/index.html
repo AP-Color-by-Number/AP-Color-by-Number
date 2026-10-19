@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Color by Number AP</title>
-  <meta name="build" content="?v=81862bf0">
+  <meta name="build" content="?v=9c4867e0">
   <meta name="description" content="A color-by-number game for Archipelago: every numbered color is an item.">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
   <link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <meta property="og:image" content="https://ap-color-by-number.github.io/AP-Color-by-Number/assets/icon-512.png">
-  <link rel="stylesheet" href="style.css?v=81862bf0">
+  <link rel="stylesheet" href="style.css?v=9c4867e0">
 </head>
 <body>
   <header class="top">
@@ -32,6 +32,7 @@
   <section id="connect" class="panel">
     <form id="connect-form">
       <h2>Connect</h2>
+      <button type="button" id="continue" class="primary continue" hidden></button>
       <label>Server <input id="server" autocomplete="off" placeholder="archipelago.gg:38281" required></label>
       <label>Slot name <input id="slot" autocomplete="off" required></label>
       <label>Password <input id="password" type="password" autocomplete="off"></label>
@@ -75,22 +76,34 @@
         <button id="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
         <button id="zoom-fit" title="Fit to screen">Fit</button>
         <button id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+        <button id="find" title="Find the next unpainted cell of this color (F)">🔍 Find</button>
       </div>
       <div class="group">
         <label class="button" title="Use your own image for this picture">⬆️ Upload image<input id="upload" type="file" accept="image/*" hidden></label>
         <button id="regen" title="Go back to this picture's generated image">Generated</button>
         <button id="reset-colors" title="Undo your recoloring of this picture">Reset colors</button>
+        <button id="gallery-open" title="See every picture, and download finished ones">🖼️ Gallery</button>
       </div>
     </div>
 
     <div id="progress" class="progress"></div>
     <div id="palette" class="palette" aria-label="Colors"></div>
-    <p class="hint">Tap 🎨 on a color to recolor it. It's only for looks: the number, its cells and its checks stay the same.</p>
+    <div class="palette-options">
+      <label class="inline-toggle"><input type="checkbox" id="hide-finished"> Hide finished colors</label>
+      <span class="hint">Tap 🎨 on a color to recolor it (looks only).</span>
+    </div>
+    <p class="hint keys">Keys: <kbd>1</kbd>–<kbd>9</kbd> pick a color (type two digits for 10+) · <kbd>B</kbd> brush ·
+      <kbd>U</kbd> bucket · <kbd>W</kbd> wide · <kbd>M</kbd> move · <kbd>F</kbd> find · <kbd>+</kbd>/<kbd>−</kbd> zoom ·
+      <kbd>Z</kbd> fit · scroll wheel zooms · right-drag, middle-drag or <kbd>Space</kbd>+drag pans · pinch on phones</p>
     <input id="recolor" class="offscreen" type="color" tabindex="-1" aria-hidden="true">
 
     <details id="logbox" class="log" open>
       <summary>Log</summary>
       <ol id="log"></ol>
+      <form id="chat-form" class="chat">
+        <input id="chat-input" autocomplete="off" placeholder="Say something to the room, or !hint Color 7" aria-label="Chat">
+        <button type="submit">Send</button>
+      </form>
     </details>
 
     <!-- Every check this seed has, from the slot's own options, and where you
@@ -117,6 +130,19 @@
         <label><input type="radio" name="upload-mode" value="auto" checked> Automatic colors</label>
         <label><input type="radio" name="upload-mode" value="mine"> Choose my colors</label>
       </div>
+      <div class="crop-controls">
+        <label>Shape
+          <select id="crop-aspect">
+            <option value="original">Whole image shape</option>
+            <option value="square">Square</option>
+            <option value="landscape">Landscape 4:3</option>
+            <option value="portrait">Portrait 3:4</option>
+          </select>
+        </label>
+        <label>Zoom <input id="crop-zoom" type="range" min="20" max="100" value="100"></label>
+        <span class="hint">Drag on the image to move the frame.</span>
+      </div>
+      <canvas id="crop-canvas" class="crop-canvas"></canvas>
       <p id="upload-mode-hint" class="hint"></p>
       <div class="upload-body">
         <canvas id="upload-preview"></canvas>
@@ -130,8 +156,31 @@
     </form>
   </dialog>
 
+  <dialog id="picture-dialog" class="picture-dialog">
+    <form method="dialog">
+      <h2 id="pic-title">Picture</h2>
+      <canvas id="pic-canvas"></canvas>
+      <p id="pic-info" class="hint"></p>
+      <div class="dialog-buttons">
+        <button type="button" id="pic-download">⬇️ Download PNG</button>
+        <button type="button" id="pic-gallery">🖼️ Gallery</button>
+        <button value="close" class="primary">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="gallery-dialog" class="gallery-dialog">
+    <form method="dialog">
+      <h2>Gallery</h2>
+      <div id="gallery-grid" class="gallery-grid"></div>
+      <div class="dialog-buttons"><button value="close" class="primary">Close</button></div>
+    </form>
+  </dialog>
+
+  <div id="drop-hint" class="drop-hint" hidden>Drop the image to use it for this picture</div>
+
   <div id="toast" class="toast" role="status" hidden></div>
 
-  <script type="module" src="src/ui.js?v=81862bf0"></script>
+  <script type="module" src="src/ui.js?v=9c4867e0"></script>
 </body>
 </html>

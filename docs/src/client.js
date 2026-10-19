@@ -4,13 +4,13 @@
 // follows the slot to any device. Nothing is saved until the restore has
 // landed, or the freshly generated pictures would overwrite real progress.
 
-import { Client } from "../node_modules/archipelago.js/dist/index.js?v=81862bf0";
+import { Client } from "../node_modules/archipelago.js/dist/index.js?v=9c4867e0";
 
 import {
   ENCOURAGEMENT, ENCOURAGEMENTS, FOG_TRAP, GAME_NAME, GRAYSCALE_TRAP, SMUDGE_TRAP, canvasItem, colorItem,
-} from "./data.js?v=81862bf0";
-import { Game } from "./game.js?v=81862bf0";
-import { rng } from "./picture.js?v=81862bf0";
+} from "./data.js?v=9c4867e0";
+import { Game } from "./game.js?v=9c4867e0";
+import { rng } from "./picture.js?v=9c4867e0";
 
 const OFFLINE_KEY = "cbn_offline";
 const SAVE_DELAY_MS = 1500;
@@ -33,6 +33,9 @@ export class CbnClient {
     this.goalSent = false;
     this.saveTimer = null;
     this.currentPicture = 0;
+    this.login = null; // { url, slotName, password } of the room we are in, for reconnecting
+    this.reconnectTimer = null;
+    this.reconnecting = false;
     this.#listen();
   }
 
@@ -43,9 +46,11 @@ export class CbnClient {
     this.client.messages.on("message", (text) => this.hooks.onLog(text, "room"));
     this.client.socket.on("disconnected", () => {
       this.connected = false;
-      if (!this.game) return; // we left on purpose
-      this.hooks.onLog("Disconnected from the server.", "warn");
+      if (!this.game || this.offline) return; // we left on purpose
+      if (this.reconnecting) return; // a failed retry also fires this; its backoff already runs
+      this.hooks.onLog("Disconnected from the server. Reconnecting...", "warn");
       this.hooks.onUpdate();
+      this.scheduleReconnect(1);
     });
   }
 
@@ -80,6 +85,8 @@ export class CbnClient {
     const options = {};
     if (password) options.password = password;
     const slotData = await this.client.login(url, slotName, GAME_NAME, options);
+    this.login = { url, slotName, password };
+    this.stopReconnecting();
     this.offline = false;
     this.restored = false;
     this.goalSent = false;
@@ -246,7 +253,65 @@ export class CbnClient {
   }
 
   /** Back to the front page: save what is pending first, then drop the room. */
+  // -- reconnecting ------------------------------------------------------------------
+  // A dropped connection (wifi blip, laptop sleep, server restart) retries on
+  // its own, backing off to every 30 s. The game in memory is kept as it is:
+  // nothing painted is lost, and any check made while offline goes out as
+  // soon as the room is back, since newChecks() compares against what the
+  // room says is checked.
+  scheduleReconnect(attempt) {
+    clearTimeout(this.reconnectTimer);
+    if (!this.login || !this.game) return;
+    this.reconnecting = true;
+    const delay = Math.min(30, 2 ** attempt) * 1000;
+    this.reconnectTimer = setTimeout(() => this.reconnect(attempt), delay);
+    this.hooks.onUpdate();
+  }
+
+  stopReconnecting() {
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+    this.reconnecting = false;
+  }
+
+  async reconnect(attempt = 1) {
+    if (!this.login || !this.game || this.connected) return;
+    const { url, slotName, password } = this.login;
+    const options = {};
+    if (password) options.password = password;
+    try {
+      const slotData = await this.client.login(url, slotName, GAME_NAME, options);
+      if (slotData.picture_seed !== this.game.seed) {
+        // A different seed answered at that address (the room was replaced):
+        // start over properly rather than paint one seed's checks into another.
+        this.hooks.onLog("The room now holds a different seed. Reconnect from the front page.", "warn");
+        this.stopReconnecting();
+        this.client.socket.disconnect();
+        return;
+      }
+      this.stopReconnecting();
+      this.connected = true;
+      for (const id of this.client.room.checkedLocations) this.game.reported.add(id);
+      this.syncItems();
+      this.hooks.onLog("Reconnected.", "good");
+      this.afterPaint(true);
+      this.scoutProgression();
+    } catch {
+      this.scheduleReconnect(attempt + 1);
+    }
+  }
+
+  // -- chat ----------------------------------------------------------------------------
+  /** Say something to the room; "!hint Color 7" and other commands work too. */
+  async say(text) {
+    if (!this.connected || !text.trim()) return false;
+    await this.client.messages.say(text.trim());
+    return true;
+  }
+
   async leave() {
+    this.stopReconnecting();
+    this.login = null;
     clearTimeout(this.saveTimer);
     await this.save();
     const wasConnected = this.connected;

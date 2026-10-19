@@ -8,7 +8,9 @@ import { readFileSync } from "node:fs";
 import * as data from "../src/data.js";
 import { Game, validPicture } from "../src/game.js";
 import { checkModel } from "../src/checks.js";
-import { colorDistance, generatePicture, mapToPalette, pictureFromImage, prepareImage, quantize, rng } from "../src/picture.js";
+import {
+  colorDistance, cropRect, cropRgba, generatePicture, mapToPalette, pictureFromImage, prepareImage, quantize, rng,
+} from "../src/picture.js";
 
 let checks = 0;
 const ok = (cond, msg) => { assert.ok(cond, msg); checks++; };
@@ -77,6 +79,19 @@ for (const k of [4, 7, 10, 16, 24]) {
   assert.throws(() => mapToPalette(rgb, 6, 1, new Array(7).fill("#000000")), /needs at least 7/);
   checks++;
   ok(colorDistance("#ff0000", "#ff0000") === 0 && colorDistance("#000000", "#ffffff") > 0.9, "distance");
+}
+
+// -- crop step
+{
+  eq(cropRect(400, 200), { x: 0, y: 0, w: 400, h: 200 }, "original aspect, full");
+  eq(cropRect(400, 200, { aspect: 1 }), { x: 100, y: 0, w: 200, h: 200 }, "square, centered");
+  eq(cropRect(400, 200, { aspect: 1, zoom: 0.5, cx: 0, cy: 0 }), { x: 0, y: 0, w: 100, h: 100 }, "zoomed, pushed inside");
+  eq(cropRect(400, 200, { aspect: 1, zoom: 0.5, cx: 1, cy: 1 }), { x: 300, y: 100, w: 100, h: 100 }, "far corner clamp");
+  eq(cropRect(200, 400, { aspect: 4 / 3 }), { x: 0, y: 125, w: 200, h: 150 }, "landscape in a tall image");
+  const src = new Uint8ClampedArray(4 * 3 * 4).map((_, i) => i); // 4x3 image
+  const cut = cropRgba(src, 4, { x: 1, y: 1, w: 2, h: 2 });
+  eq([...cut.slice(0, 4)], [20, 21, 22, 23], "crop first pixel is (1,1)");
+  eq([...cut.slice(8, 12)], [36, 37, 38, 39], "crop second row starts at (1,2)");
 }
 
 // -- play: items gate paint, tools spend charges, checks and goal

@@ -41,6 +41,15 @@ class TestDefault(ColorByNumberTestBase):
             self.multiworld.state.collect(item)
         self.assertTrue(self.can_reach_location(tool_location(PAINT_BUCKET, 10)))
 
+    def test_tool_checks_hold_filler_by_default(self) -> None:
+        from BaseClasses import LocationProgressType
+        for tool in (PAINT_BUCKET, "Wide Brush"):
+            for uses in (3, 5, 10):
+                loc = self.multiworld.get_location(tool_location(tool, uses), self.player)
+                # Excluded is what makes fill keep progression and useful items out;
+                # the contents themselves are checked on a real generation.
+                self.assertEqual(loc.progress_type, LocationProgressType.EXCLUDED)
+
     def test_starting_colors(self) -> None:
         start = [i.name for i in self.multiworld.precollected_items[self.player]]
         self.assertEqual(len(start), 2)
@@ -90,6 +99,15 @@ class TestFifths(ColorByNumberTestBase):
         self.assertIn(color_location(2, 5, 100), names)
         self.assertNotIn(color_location(2, 5, 25), names)
         self.assertEqual(self.world.fill_slot_data()["color_percents"], [20, 40, 60, 80, 100])
+
+
+class TestToolRewardsAnything(ColorByNumberTestBase):
+    options = {"tool_check_rewards": 1}
+
+    def test_not_excluded(self) -> None:
+        from BaseClasses import LocationProgressType
+        loc = self.multiworld.get_location(tool_location(PAINT_BUCKET, 10), self.player)
+        self.assertEqual(loc.progress_type, LocationProgressType.DEFAULT)
 
 
 class TestAllStart(ColorByNumberTestBase):

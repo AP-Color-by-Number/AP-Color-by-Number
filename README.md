@@ -24,7 +24,8 @@ paint ones generated from your seed.
 - **Checks**: each color in each picture pays out as you paint it: every 25%, 20% or 10%
   (the `color_checks` option). Plus four whole-picture milestones counted in finished
   colors (a quarter, half, three quarters, all), and, with `tool_checks`, using each tool
-  3, 5 and 10 times.
+  3, 5 and 10 times. By default (`tool_check_rewards: filler_only`) the tool checks hold only
+  filler or traps, so ignoring the tools can never hold anyone up.
   Whole-picture milestones count colors rather than cells because uploaded pictures
   are unknown at generation, so area is not something logic can promise.
 - **Tools**: Paint Bucket (fills a connected patch) and Wide Brush (5x5), 5 charges
@@ -35,6 +36,16 @@ paint ones generated from your seed.
 - **Check list**: a side panel lists every check your seed has, built from your yaml's
   options, marked checked / can get now / needs an item (and what item), with a ★ on
   checks that hold something someone needs. Click a color's row to paint it.
+- **Finding cells**: 🔍 Find (or <kbd>F</kbd>) jumps to the next unpainted cell of your color; each
+  swatch shows how many cells are left; finished colors can be hidden.
+- **Controls**: the scroll wheel zooms around the cursor; right-drag, middle-drag or Space+drag pans;
+  pinch and two-finger drag on phones; keyboard shortcuts for colors (1-9, two digits for 10+),
+  tools (B, U, W, M), Find (F) and zoom (+, -, Z).
+- **Connection**: reconnects on its own if the connection drops (nothing painted is lost), a
+  Continue button for your last room, chat with the room (including `!hint`), and the tab title
+  counts new items while you're in another tab.
+- **Finished pictures**: a completion view with Download PNG, and a gallery of every picture.
+- **Uploads**: drag and drop or paste an image; crop it (shape, zoom, drag) before it becomes a grid.
 - **Sound**: soft synthesized effects for painting, tools, checks, received items, traps and
   finished colors/pictures. Mute and volume are in the top bar.
 

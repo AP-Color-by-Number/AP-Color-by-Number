@@ -333,6 +333,35 @@ export function quantize(rgb, w, h, k, seed = 1) {
   };
 }
 
+/** Aspect ratios offered by the crop step (width / height); null = the image's own. */
+export const CROP_ASPECTS = { original: null, square: 1, landscape: 4 / 3, portrait: 3 / 4 };
+
+/**
+ * The crop rectangle for an image: the biggest rect of `aspect` that fits,
+ * scaled by `zoom` (1 = all of it, smaller = closer in), centered on
+ * (cx, cy) in 0..1 of the image and pushed back inside its edges.
+ */
+export function cropRect(sw, sh, { aspect = null, zoom = 1, cx = 0.5, cy = 0.5 } = {}) {
+  const a = aspect ?? sw / sh;
+  let w = sw, h = sw / a;
+  if (h > sh) { h = sh; w = sh * a; }
+  w = Math.max(1, Math.round(w * zoom));
+  h = Math.max(1, Math.round(h * zoom));
+  const x = Math.round(Math.min(sw - w, Math.max(0, cx * sw - w / 2)));
+  const y = Math.round(Math.min(sh - h, Math.max(0, cy * sh - h / 2)));
+  return { x, y, w, h };
+}
+
+/** Copy a rectangle out of RGBA. */
+export function cropRgba(rgba, sw, { x, y, w, h }) {
+  const out = new Uint8ClampedArray(w * h * 4);
+  for (let row = 0; row < h; row++) {
+    const from = ((y + row) * sw + x) * 4;
+    out.set(rgba.subarray(from, from + w * 4), row * w * 4);
+  }
+  return out;
+}
+
 /** Shrink raw RGBA to the grid: { rgb, w, h }, ready for quantize or mapToPalette. */
 export function prepareImage(rgba, sw, sh, grid) {
   const [w, h] = fitSize(sw, sh, grid);

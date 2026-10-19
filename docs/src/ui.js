@@ -1,11 +1,13 @@
 // DOM layer: the canvas, palette, tools and forms. Reads CbnClient + Game,
 // never changes game state except through them.
 
-import { play, setMuted, setVolume, soundSettings } from "./sound.js?v=81862bf0";
-import { CbnClient } from "./client.js?v=81862bf0";
-import { checkModel } from "./checks.js?v=81862bf0";
-import { TOOL_USES, canvasItem, colorItem } from "./data.js?v=81862bf0";
-import { colorDistance, lightness, mapToPalette, oklchHex, prepareImage, quantize } from "./picture.js?v=81862bf0";
+import { play, setMuted, setVolume, soundSettings } from "./sound.js?v=9c4867e0";
+import { CbnClient } from "./client.js?v=9c4867e0";
+import { checkModel } from "./checks.js?v=9c4867e0";
+import { TOOL_USES, canvasItem, colorItem } from "./data.js?v=9c4867e0";
+import {
+  CROP_ASPECTS, colorDistance, cropRect, cropRgba, lightness, mapToPalette, oklchHex, prepareImage, quantize,
+} from "./picture.js?v=9c4867e0";
 
 const $ = (id) => document.getElementById(id);
 const canvasEl = $("canvas");
@@ -24,7 +26,10 @@ const cbn = new CbnClient({
   onUpdate: () => render(),
   onCells: (p, cells) => { if (p === view.picture) cells.forEach(drawCell); renderPalette(); renderTabs(); },
   onLog: (text, kind) => log(text, kind),
-  onSound: (name) => play(name),
+  onSound: (name) => {
+    play(name);
+    if (name === "item" || name === "trap") noteNews();
+  },
   onEffect: (name, seconds) => {
     view.effects[name] = Date.now() + seconds * 1000;
     tickEffects();
@@ -38,6 +43,20 @@ const remembered = (() => { try { return JSON.parse(localStorage.getItem("cbn_lo
 $("server").value = remembered.server ?? "";
 $("slot").value = remembered.slot ?? "";
 
+// One click back into the last room. The password is never stored, so a
+// passworded room still takes it from the field.
+function renderContinue() {
+  const ok = Boolean(remembered.server && remembered.slot);
+  $("continue").hidden = !ok;
+  if (ok) $("continue").textContent = `Continue as ${remembered.slot} on ${remembered.server}`;
+}
+$("continue").addEventListener("click", () => {
+  $("server").value = remembered.server;
+  $("slot").value = remembered.slot;
+  $("connect-form").requestSubmit($("connect-form").querySelector('button[type="submit"]'));
+});
+renderContinue();
+
 $("connect-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const button = event.submitter;
@@ -46,6 +65,8 @@ $("connect-form").addEventListener("submit", async (event) => {
   const server = $("server").value.trim(), slot = $("slot").value.trim();
   try {
     try { localStorage.setItem("cbn_login", JSON.stringify({ server, slot })); } catch { /* fine */ }
+    Object.assign(remembered, { server, slot });
+    renderContinue();
     await cbn.connect(server, slot, $("password").value);
     view.picture = 0;
     view.color = null;
@@ -102,46 +123,155 @@ for (const button of document.querySelectorAll("[data-tool]")) {
   });
 }
 $("move").addEventListener("click", () => { view.moving = !view.moving; renderTools(); });
-$("zoom-in").addEventListener("click", () => setZoom(currentZoom() * 1.25));
-$("zoom-out").addEventListener("click", () => setZoom(currentZoom() / 1.25));
-$("zoom-fit").addEventListener("click", () => { view.zoom = null; drawAll(); });
+$("zoom-in").addEventListener("click", () => zoomCentered(currentZoom() * 1.25));
+$("zoom-out").addEventListener("click", () => zoomCentered(currentZoom() / 1.25));
+$("zoom-fit").addEventListener("click", fitView);
 
 $("upload").addEventListener("change", async (event) => {
   const file = event.target.files[0];
   event.target.value = "";
-  if (!file) return;
+  if (file) takeImage(file, file.name);
+});
+
+async function takeImage(file, name) {
   try {
-    const { rgba, w, h } = await readImage(file);
-    openUploadDialog(file.name, prepareImage(rgba, w, h, cbn.game.grid));
+    openUploadDialog(name || "pasted image", await readImage(file));
   } catch (err) {
     toast(`Could not read that image: ${err.message ?? err}`);
   }
-});
+}
 
 // -- upload dialog ------------------------------------------------------------------------
 // Two routes to the same kind of picture: automatic (k-means picks the colors)
 // or the player's own colors (every cell takes the nearest one). Choosing
 // starts from the automatic colors, so it is tweaking rather than a blank slate.
-const upload = { name: "", prep: null, auto: null, autoError: "", mine: [], pic: null };
+// Before either, the crop: a frame over the source image that you shape, zoom
+// and drag, so a face can fill the grid instead of the whole photo.
+const upload = { name: "", src: null, crop: null, prep: null, auto: null, autoError: "", mine: [], pic: null };
+let recropTimer = null;
 
-function openUploadDialog(name, prep) {
-  const g = cbn.game;
+function openUploadDialog(name, src) {
   upload.name = name;
-  upload.prep = prep;
+  upload.src = src;
+  upload.crop = { aspect: "original", zoom: 1, cx: 0.5, cy: 0.5 };
+  upload.mine = [];
+  $("crop-aspect").value = "original";
+  document.querySelector('input[name="upload-mode"][value="auto"]').checked = true;
+  $("crop-zoom").value = "100";
+  $("upload-title").textContent = `Picture ${view.picture + 1}: ${name}`;
+  recrop();
+  $("upload-dialog").showModal();
+}
+
+function currentCropRect() {
+  const { src, crop } = upload;
+  return cropRect(src.w, src.h, { aspect: CROP_ASPECTS[crop.aspect], zoom: crop.zoom, cx: crop.cx, cy: crop.cy });
+}
+
+/** Re-cut the picture from the frame: shrink to the grid, re-pick colors. */
+function recrop() {
+  const g = cbn.game, { src } = upload;
+  const rect = currentCropRect();
+  // Store the clamped center, so dragging past an edge does not build up slack.
+  upload.crop.cx = (rect.x + rect.w / 2) / src.w;
+  upload.crop.cy = (rect.y + rect.h / 2) / src.h;
+  upload.prep = prepareImage(cropRgba(src.rgba, src.w, rect), rect.w, rect.h, g.grid);
   try {
-    upload.auto = quantize(prep.rgb, prep.w, prep.h, g.k, g.seed + view.picture);
+    upload.auto = quantize(upload.prep.rgb, upload.prep.w, upload.prep.h, g.k, g.seed + view.picture);
     upload.autoError = "";
   } catch (err) {
     upload.auto = null;
     upload.autoError = err.message;
   }
-  // No automatic colors (too few distinct ones): start from an even spread of hues.
-  upload.mine = upload.auto ? [...upload.auto.palette]
-    : Array.from({ length: g.k }, (_, i) => oklchHex([0.5, 0.7, 0.85][i % 3], 0.14, (i * 360) / g.k));
-  setUploadMode(upload.auto ? "auto" : "mine");
-  $("upload-title").textContent = `Picture ${view.picture + 1}: ${name}`;
-  $("upload-dialog").showModal();
+  // Your own colors survive re-cropping; the first time they start from the
+  // automatic ones (or an even spread of hues when there are none).
+  if (upload.mine.length !== g.k) {
+    upload.mine = upload.auto ? [...upload.auto.palette]
+      : Array.from({ length: g.k }, (_, i) => oklchHex([0.5, 0.7, 0.85][i % 3], 0.14, (i * 360) / g.k));
+  }
+  const checked = document.querySelector('input[name="upload-mode"]:checked')?.value ?? "auto";
+  setUploadMode(upload.auto && (checked === "auto" || !upload.mine.length) ? checked : "mine");
+  drawCrop(rect);
 }
+
+function scheduleRecrop() {
+  clearTimeout(recropTimer);
+  recropTimer = setTimeout(recrop, 60);
+  drawCrop(currentCropRect()); // the frame moves at once; the colors catch up
+}
+
+function drawCrop(rect) {
+  const { src } = upload, canvas = $("crop-canvas");
+  canvas.width = src.w;
+  canvas.height = src.h;
+  const cctx = canvas.getContext("2d");
+  cctx.putImageData(new ImageData(new Uint8ClampedArray(src.rgba), src.w, src.h), 0, 0);
+  cctx.fillStyle = "rgb(0 0 0 / 0.55)";
+  cctx.fillRect(0, 0, src.w, rect.y);
+  cctx.fillRect(0, rect.y + rect.h, src.w, src.h - rect.y - rect.h);
+  cctx.fillRect(0, rect.y, rect.x, rect.h);
+  cctx.fillRect(rect.x + rect.w, rect.y, src.w - rect.x - rect.w, rect.h);
+  cctx.strokeStyle = "#ffffff";
+  cctx.lineWidth = Math.max(1, src.w / 256);
+  cctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
+}
+
+$("crop-aspect").addEventListener("change", () => { upload.crop.aspect = $("crop-aspect").value; scheduleRecrop(); });
+$("crop-zoom").addEventListener("input", () => { upload.crop.zoom = Number($("crop-zoom").value) / 100; scheduleRecrop(); });
+$("crop-canvas").addEventListener("wheel", (event) => {
+  event.preventDefault();
+  const z = Math.min(1, Math.max(0.2, upload.crop.zoom * (event.deltaY < 0 ? 0.9 : 1 / 0.9)));
+  upload.crop.zoom = z;
+  $("crop-zoom").value = String(Math.round(z * 100));
+  scheduleRecrop();
+}, { passive: false });
+{
+  let drag = null;
+  const canvas = $("crop-canvas");
+  canvas.addEventListener("pointerdown", (event) => {
+    canvas.setPointerCapture(event.pointerId);
+    drag = { x: event.clientX, y: event.clientY, cx: upload.crop.cx, cy: upload.crop.cy };
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (!drag) return;
+    const box = canvas.getBoundingClientRect();
+    upload.crop.cx = drag.cx + (event.clientX - drag.x) / box.width;
+    upload.crop.cy = drag.cy + (event.clientY - drag.y) / box.height;
+    scheduleRecrop();
+  });
+  const end = () => { drag = null; };
+  canvas.addEventListener("pointerup", end);
+  canvas.addEventListener("pointercancel", end);
+}
+
+// Drop an image anywhere on the page, or paste one, to start an upload.
+function canUpload() {
+  return Boolean(cbn.game) && !$("game").hidden && cbn.game.unlocked.has(view.picture)
+    && !document.querySelector("dialog[open]");
+}
+const imageFile = (list) => [...(list ?? [])].find((f) => f.type?.startsWith("image/"));
+window.addEventListener("dragover", (event) => {
+  if (!canUpload() || ![...(event.dataTransfer?.types ?? [])].includes("Files")) return;
+  event.preventDefault();
+  $("drop-hint").textContent = `Drop the image to use it for Picture ${view.picture + 1}`;
+  $("drop-hint").hidden = false;
+});
+window.addEventListener("dragleave", (event) => { if (!event.relatedTarget) $("drop-hint").hidden = true; });
+window.addEventListener("drop", (event) => {
+  $("drop-hint").hidden = true;
+  if (!canUpload()) return;
+  event.preventDefault();
+  const file = imageFile(event.dataTransfer?.files);
+  if (file) takeImage(file, file.name);
+  else toast("That isn't an image file.");
+});
+window.addEventListener("paste", (event) => {
+  if (!canUpload()) return;
+  const item = [...(event.clipboardData?.items ?? [])].find((i) => i.type.startsWith("image/"));
+  if (!item) return;
+  event.preventDefault();
+  takeImage(item.getAsFile(), "pasted image");
+});
 
 function uploadMode() {
   return document.querySelector('input[name="upload-mode"]:checked').value;
@@ -285,8 +415,34 @@ function currentZoom() {
   return view.zoom ?? fitZoom();
 }
 
-function setZoom(z) {
-  view.zoom = Math.min(64, Math.max(4, Math.round(z)));
+// Zoom keeps whatever is under (x, y) where it is, the way maps do. The goal is
+// kept as a float, so many tiny trackpad steps add up instead of each rounding
+// back to the same whole pixel size.
+let zoomGoal = null;
+
+function zoomAt(z, x, y) {
+  const scroller = $("scroller");
+  const old = currentZoom();
+  const next = Math.min(64, Math.max(4, Math.round(z)));
+  if (next === old) return;
+  const before = canvasEl.getBoundingClientRect();
+  const fx = (x - before.left) / old, fy = (y - before.top) / old;
+  view.zoom = next;
+  drawAll();
+  const after = canvasEl.getBoundingClientRect();
+  scroller.scrollLeft += after.left + fx * next - x;
+  scroller.scrollTop += after.top + fy * next - y;
+}
+
+function zoomCentered(z) {
+  zoomGoal = null;
+  const box = $("scroller").getBoundingClientRect();
+  zoomAt(z, box.left + box.width / 2, box.top + box.height / 2);
+}
+
+function fitView() {
+  zoomGoal = null;
+  view.zoom = null;
   drawAll();
 }
 
@@ -402,7 +558,10 @@ function paintCell(i) {
       selectNextColor();
       drawAll();
     }
-    if (c.complete) renderTabs();
+    if (c.complete) {
+      renderTabs();
+      openPicture(view.picture, { celebrate: true });
+    }
     if (view.tool !== "brush") renderTools();
   } else if (c.cells[i] !== view.color && !dragging) {
     // Tapping another number is a hint, not a mistake worth a sound.
@@ -411,31 +570,133 @@ function paintCell(i) {
   }
 }
 
-canvasEl.addEventListener("pointerdown", (event) => {
-  if (view.moving || !cbn.game) return;
-  event.preventDefault();
+// Painting is a left press. Panning is a right or middle drag, Space + drag,
+// or any drag in Move mode with a mouse (on touch, Move hands the gesture to
+// the browser's own scrolling). Two fingers on a touch screen pinch-zoom and
+// pan, and cancel the stroke the first finger started.
+// Capture keeps a drag going when it leaves the canvas. It can refuse (a
+// pointer that already ended), and a drag without it still works.
+const capture = (id) => { try { canvasEl.setPointerCapture(id); } catch { /* fine */ } };
+const touches = new Map();
+let pinch = null, pan = null, spaceHeld = false, suppressPaint = false;
+// A finger waits this long before it paints, in case a second one lands for a
+// pinch. Lifting or moving it first paints at once, so taps feel the same.
+const TOUCH_HOLD_MS = 90;
+let pendingTouch = null;
+
+function beginStroke(event) {
   lastCell = -1;
   dragging = view.tool === "brush";
-  if (dragging) canvasEl.setPointerCapture(event.pointerId);
+  if (dragging) capture(event.pointerId);
   paintAt(event);
+}
+
+function flushPendingTouch() {
+  if (!pendingTouch) return;
+  clearTimeout(pendingTouch.timer);
+  const { event } = pendingTouch;
+  pendingTouch = null;
+  beginStroke(event);
+}
+
+canvasEl.addEventListener("contextmenu", (event) => event.preventDefault());
+
+canvasEl.addEventListener("pointerdown", (event) => {
+  if (!cbn.game) return;
+  if (event.pointerType === "touch") {
+    if (view.moving) return; // native scrolling
+    touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (touches.size >= 2) {
+      if (pendingTouch) { clearTimeout(pendingTouch.timer); pendingTouch = null; }
+      dragging = false;
+      suppressPaint = true;
+      startPinch();
+      return;
+    }
+  }
+  const wantsPan = view.moving || event.button === 1 || event.button === 2 || (spaceHeld && event.button === 0);
+  if (wantsPan) {
+    event.preventDefault();
+    const scroller = $("scroller");
+    pan = { id: event.pointerId, x: event.clientX, y: event.clientY, left: scroller.scrollLeft, top: scroller.scrollTop };
+    capture(event.pointerId);
+    scroller.classList.add("panning");
+    return;
+  }
+  if (event.button !== 0 || suppressPaint) return;
+  event.preventDefault();
+  if (event.pointerType === "touch") {
+    const saved = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY };
+    pendingTouch = { event: saved, timer: setTimeout(flushPendingTouch, TOUCH_HOLD_MS) };
+    return;
+  }
+  beginStroke(event);
 });
-canvasEl.addEventListener("pointermove", (event) => { if (dragging) paintAt(event); });
-const stop = () => { dragging = false; lastCell = -1; };
-canvasEl.addEventListener("pointerup", stop);
-canvasEl.addEventListener("pointercancel", stop);
+
+canvasEl.addEventListener("pointermove", (event) => {
+  if (touches.has(event.pointerId)) {
+    touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinch) { updatePinch(); return; }
+    if (pendingTouch?.event.pointerId === event.pointerId) flushPendingTouch();
+  }
+  if (pan && event.pointerId === pan.id) {
+    const scroller = $("scroller");
+    scroller.scrollLeft = pan.left - (event.clientX - pan.x);
+    scroller.scrollTop = pan.top - (event.clientY - pan.y);
+    return;
+  }
+  if (dragging && !suppressPaint) paintAt(event);
+});
+
+function endPointer(event) {
+  if (pendingTouch?.event.pointerId === event.pointerId) flushPendingTouch(); // a quick tap
+  touches.delete(event.pointerId);
+  if (touches.size < 2) pinch = null;
+  if (touches.size === 0) suppressPaint = false;
+  if (pan && event.pointerId === pan.id) {
+    pan = null;
+    $("scroller").classList.remove("panning");
+  }
+  dragging = false;
+  lastCell = -1;
+}
+canvasEl.addEventListener("pointerup", endPointer);
+canvasEl.addEventListener("pointercancel", endPointer);
 window.addEventListener("resize", () => { if (view.zoom === null) drawAll(); });
 
-// Ctrl/trackpad pinch zooms around the cursor.
+const midpoint = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+const spread = (a, b) => Math.hypot(a.x - b.x, a.y - b.y) || 1;
+
+function startPinch() {
+  const [a, b] = [...touches.values()];
+  pinch = { dist: spread(a, b), zoom: currentZoom(), mid: midpoint(a, b) };
+}
+
+function updatePinch() {
+  const [a, b] = [...touches.values()];
+  const mid = midpoint(a, b), scroller = $("scroller");
+  zoomAt(pinch.zoom * spread(a, b) / pinch.dist, mid.x, mid.y);
+  scroller.scrollLeft -= mid.x - pinch.mid.x;
+  scroller.scrollTop -= mid.y - pinch.mid.y;
+  pinch.mid = mid;
+}
+
+// The wheel zooms around the cursor; a trackpad pinch arrives as a
+// Ctrl+wheel and zooms the same way. Shift+wheel is left to scroll sideways.
 $("scroller").addEventListener("wheel", (event) => {
-  if (!event.ctrlKey || !cbn.game) return;
+  if (!cbn.game || event.shiftKey) return;
   event.preventDefault();
-  setZoom(currentZoom() * (event.deltaY < 0 ? 1.15 : 1 / 1.15));
+  const factor = event.ctrlKey ? Math.exp(-event.deltaY * 0.01) : event.deltaY < 0 ? 1.15 : 1 / 1.15;
+  zoomGoal = Math.min(64, Math.max(4, (zoomGoal ?? currentZoom()) * factor));
+  zoomAt(zoomGoal, event.clientX, event.clientY);
 }, { passive: false });
 
 // -- panels -------------------------------------------------------------------------------
 function render() {
   const g = cbn.game;
-  $("status").textContent = cbn.connected ? "Connected" : cbn.offline ? "Offline practice" : "Not connected";
+  $("status").textContent = cbn.connected ? "Connected" : cbn.offline ? "Offline practice"
+    : cbn.reconnecting ? "Reconnecting…" : "Not connected";
+  $("chat-form").hidden = cbn.offline;
   $("status").classList.toggle("on", cbn.connected);
   if (!g) return;
   if (view.picture >= g.pictureCount) view.picture = 0;
@@ -471,6 +732,7 @@ function renderTabs() {
     b.addEventListener("click", () => {
       view.picture = p;
       view.zoom = null;
+      zoomGoal = null;
       view.color = null;
       render();
     });
@@ -493,11 +755,21 @@ function renderTools() {
   $("scroller").classList.toggle("moving", view.moving);
 }
 
+let hideFinished = false;
+try { hideFinished = localStorage.getItem("cbn_hide_finished") === "1"; } catch { /* default off */ }
+$("hide-finished").checked = hideFinished;
+$("hide-finished").addEventListener("change", () => {
+  hideFinished = $("hide-finished").checked;
+  try { localStorage.setItem("cbn_hide_finished", hideFinished ? "1" : "0"); } catch { /* fine */ }
+  renderPalette();
+});
+
 function renderPalette() {
   const g = cbn.game, c = currentCanvas();
   $("palette").replaceChildren(...c.palette.map((hex, n) => {
     const b = document.createElement("button");
     const owned = g.colors.has(n), finished = c.done[n] === c.total[n];
+    if (hideFinished && owned && finished && n !== view.color) return null;
     b.className = "swatch";
     b.classList.toggle("locked-color", !owned);
     b.classList.toggle("finished", finished);
@@ -514,7 +786,10 @@ function renderPalette() {
     const bar = document.createElement("span");
     bar.className = "bar";
     bar.innerHTML = `<i style="width:${(100 * c.done[n]) / c.total[n]}%"></i>`;
-    b.append(chip, bar);
+    const left = document.createElement("span");
+    left.className = "left";
+    left.textContent = !owned ? "" : finished ? "done" : `${c.total[n] - c.done[n]} left`;
+    b.append(chip, bar, left);
     b.classList.toggle("recolored-color", hex !== c.orig[n]);
     b.addEventListener("click", () => {
       if (!owned) { toast(`${colorItem(n + 1)} hasn't been sent to you yet.`); return; }
@@ -540,7 +815,7 @@ function renderPalette() {
       wrap.append(edit);
     }
     return wrap;
-  }));
+  }).filter(Boolean));
 }
 
 // -- check list --------------------------------------------------------------------------
@@ -768,6 +1043,201 @@ $("update-reload").addEventListener("click", async () => {
 checkForUpdate();
 setInterval(checkForUpdate, 5 * 60 * 1000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) checkForUpdate(); });
+
+// -- keyboard ---------------------------------------------------------------------------------
+// Digits pick colors. With ten or more colors a digit that could start a
+// two-digit number waits a moment for the second one ("1" then "2" is 12).
+let digits = "", digitTimer = null;
+
+function pickByNumber(num) {
+  const g = cbn.game, idx = num - 1;
+  if (idx < 0 || idx >= g.k) { toast(`There is no Color ${num} in this seed.`); return; }
+  if (!g.colors.has(idx)) { toast(`${colorItem(num)} hasn't been sent to you yet.`); return; }
+  view.color = idx;
+  view.moving = false;
+  renderTools();
+  renderPalette();
+  drawAll();
+}
+
+function typeDigit(d) {
+  clearTimeout(digitTimer);
+  digits += d;
+  const n = Number(digits), k = cbn.game.k;
+  if (digits.length === 1 && n > 0 && n * 10 <= k) {
+    digitTimer = setTimeout(() => { pickByNumber(n); digits = ""; }, 600);
+    return;
+  }
+  pickByNumber(digits === "0" ? 10 : n);
+  digits = "";
+}
+
+function setTool(tool) {
+  if (tool !== "brush" && !cbn.game.tools[tool]) { toast(`You don't have the ${tool === "bucket" ? "Paint Bucket" : "Wide Brush"} yet.`); return; }
+  view.tool = tool;
+  view.moving = false;
+  renderTools();
+}
+
+const isTyping = (target) => Boolean(target?.closest?.("input, textarea, select, [contenteditable='true']"));
+
+document.addEventListener("keydown", (event) => {
+  if (!cbn.game || $("game").hidden || document.querySelector("dialog[open]")) return;
+  if (isTyping(event.target) || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.key === " ") {
+    event.preventDefault();
+    spaceHeld = true;
+    $("scroller").classList.add("space-pan");
+    return;
+  }
+  if (/^[0-9]$/.test(event.key)) { event.preventDefault(); typeDigit(event.key); return; }
+  const actions = {
+    b: () => setTool("brush"), u: () => setTool("bucket"), w: () => setTool("wide"),
+    m: () => { view.moving = !view.moving; renderTools(); },
+    f: findNext, z: fitView,
+    "+": () => zoomCentered(currentZoom() * 1.25), "=": () => zoomCentered(currentZoom() * 1.25),
+    "-": () => zoomCentered(currentZoom() / 1.25), _: () => zoomCentered(currentZoom() / 1.25),
+  };
+  const act = actions[event.key.toLowerCase()];
+  if (act) { event.preventDefault(); act(); }
+});
+document.addEventListener("keyup", (event) => {
+  if (event.key === " ") { spaceHeld = false; $("scroller").classList.remove("space-pan"); }
+});
+
+// -- find next cell -------------------------------------------------------------------------
+// The nearest unpainted cell of the selected color: nearest to the last one
+// found, or to the middle of the view. Cells already shown are skipped, so
+// pressing again keeps moving on instead of bouncing between two neighbours;
+// once every one has been shown, the round starts over.
+let lastFound = { cell: -1, color: null, picture: -1, seen: new Set() };
+
+function findNext() {
+  const c = currentCanvas(), color = view.color;
+  if (color === null) { toast("Pick a color first."); return; }
+  const open = [];
+  c.cells.forEach((v, i) => { if (v === color && !c.painted[i]) open.push(i); });
+  if (!open.length) { toast(`${colorItem(color + 1)} is finished on this picture.`); return; }
+  if (currentZoom() < 18) { view.zoom = 18; zoomGoal = null; drawAll(); }
+  const z = currentZoom(), scroller = $("scroller");
+  let rx, ry;
+  const same = lastFound.color === color && lastFound.picture === view.picture && lastFound.cell >= 0;
+  if (!same) lastFound.seen = new Set();
+  if (open.every((i) => lastFound.seen.has(i))) lastFound.seen.clear();
+  if (same) {
+    rx = lastFound.cell % c.w;
+    ry = Math.floor(lastFound.cell / c.w);
+  } else {
+    rx = (scroller.scrollLeft + scroller.clientWidth / 2 - canvasEl.offsetLeft) / z;
+    ry = (scroller.scrollTop + scroller.clientHeight / 2 - canvasEl.offsetTop) / z;
+  }
+  let best = open[0], bestD = Infinity;
+  for (const i of open) {
+    if (lastFound.seen.has(i)) continue;
+    const d = Math.hypot((i % c.w) + 0.5 - rx, Math.floor(i / c.w) + 0.5 - ry);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  lastFound.seen.add(best);
+  Object.assign(lastFound, { cell: best, color, picture: view.picture });
+  const x = canvasEl.offsetLeft + ((best % c.w) + 0.5) * z, y = canvasEl.offsetTop + (Math.floor(best / c.w) + 0.5) * z;
+  scroller.scrollTo({ left: x - scroller.clientWidth / 2, top: y - scroller.clientHeight / 2, behavior: "smooth" });
+  const ring = document.createElement("div");
+  ring.className = "find-ring";
+  const size = z * 2.2;
+  Object.assign(ring.style, { left: `${x - size / 2}px`, top: `${y - size / 2}px`, width: `${size}px`, height: `${size}px` });
+  scroller.append(ring);
+  setTimeout(() => ring.remove(), 1500);
+}
+$("find").addEventListener("click", findNext);
+
+// -- finished pictures, gallery, download -------------------------------------------------------
+/** Draw a picture flat: painted cells in their colors, the rest pale. */
+function drawPicture(canvas, c, scale) {
+  canvas.width = c.w * scale;
+  canvas.height = c.h * scale;
+  const pctx = canvas.getContext("2d");
+  for (let i = 0; i < c.cells.length; i++) {
+    pctx.fillStyle = c.painted[i] ? c.palette[c.cells[i]] : "#ececf0";
+    pctx.fillRect((i % c.w) * scale, Math.floor(i / c.w) * scale, scale, scale);
+  }
+}
+
+let shownPicture = 0;
+
+function openPicture(p, { celebrate = false } = {}) {
+  const c = cbn.game.canvases[p];
+  shownPicture = p;
+  drawPicture($("pic-canvas"), c, Math.max(1, Math.floor(480 / Math.max(c.w, c.h))));
+  const painted = c.done.reduce((a, b) => a + b, 0);
+  $("pic-title").textContent = celebrate ? `Picture ${p + 1} complete! 🎉` : `Picture ${p + 1}`;
+  $("pic-info").textContent = `${c.w}×${c.h} cells · ${Math.floor((100 * painted) / c.cells.length)}% painted`
+    + (c.src === "upload" ? " · your image" : " · generated");
+  if (!$("picture-dialog").open) $("picture-dialog").showModal();
+}
+
+$("pic-download").addEventListener("click", () => {
+  const c = cbn.game.canvases[shownPicture];
+  const out = document.createElement("canvas");
+  drawPicture(out, c, Math.max(1, Math.floor(1024 / Math.max(c.w, c.h))));
+  out.toBlob((blob) => {
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `color-by-number-picture-${shownPicture + 1}.png`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+  }, "image/png");
+});
+
+function openGallery() {
+  const g = cbn.game;
+  $("gallery-grid").replaceChildren(...g.canvases.map((c, p) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "gallery-item";
+    const unlocked = g.unlocked.has(p);
+    const painted = c.done.reduce((a, b) => a + b, 0);
+    const pct = Math.floor((100 * painted) / c.cells.length);
+    item.classList.toggle("done", c.complete);
+    item.classList.toggle("locked-pic", !unlocked);
+    const thumb = document.createElement("canvas");
+    if (unlocked) drawPicture(thumb, c, Math.max(1, Math.floor(160 / Math.max(c.w, c.h))));
+    const label = document.createElement("span");
+    label.textContent = !unlocked ? `🔒 Picture ${p + 1}` : c.complete ? `✓ Picture ${p + 1}` : `Picture ${p + 1} · ${pct}%`;
+    item.append(thumb, label);
+    item.disabled = !unlocked;
+    item.addEventListener("click", () => { $("gallery-dialog").close(); openPicture(p); });
+    return item;
+  }));
+  if (!$("gallery-dialog").open) $("gallery-dialog").showModal();
+}
+$("gallery-open").addEventListener("click", openGallery);
+$("pic-gallery").addEventListener("click", () => { $("picture-dialog").close(); openGallery(); });
+
+// -- chat -------------------------------------------------------------------------------------
+$("chat-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const input = $("chat-input");
+  if (!cbn.connected) { toast("Connect to a room to chat."); return; }
+  try {
+    if (await cbn.say(input.value)) input.value = "";
+  } catch (err) {
+    toast(`Could not send: ${err.message ?? err}`);
+  }
+});
+
+// -- tab title alerts -----------------------------------------------------------------------------
+// Something arrived while you were in another tab: say so in the tab itself.
+const BASE_TITLE = document.title;
+let unread = 0;
+
+function noteNews() {
+  if (!document.hidden) return;
+  unread += 1;
+  document.title = `(${unread}) ${BASE_TITLE}`;
+}
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && unread) { unread = 0; document.title = BASE_TITLE; }
+});
 
 // -- log + toast ----------------------------------------------------------------------------
 function log(text, kind = "info") {

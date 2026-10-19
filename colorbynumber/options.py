@@ -54,6 +54,20 @@ class ToolChecks(DefaultOnToggle):
     display_name = "Tool Checks"
 
 
+class ToolCheckRewards(Choice):
+    """
+    What the tool checks may hold.
+
+    filler_only: only filler and traps, so a player who sticks to the brush can
+                 never be held up by them (recommended)
+    anything:    any item, progression included
+    """
+    display_name = "Tool Check Rewards"
+    option_filler_only = 0
+    option_anything = 1
+    default = option_filler_only
+
+
 class StartingColors(Range):
     """How many random colors you start with."""
     display_name = "Starting Colors"
@@ -79,12 +93,13 @@ class ColorByNumberOptions(PerGameCommonOptions):
     grid_size: GridSize
     color_checks: ColorChecks
     tool_checks: ToolChecks
+    tool_check_rewards: ToolCheckRewards
     starting_colors: StartingColors
     trap_chance: TrapChance
 
 
 option_groups = [
     OptionGroup("Canvas", [Pictures, ColorsPerPicture, GridSize]),
-    OptionGroup("Checks", [ColorChecks, ToolChecks]),
+    OptionGroup("Checks", [ColorChecks, ToolChecks, ToolCheckRewards]),
     OptionGroup("Items", [StartingColors, TrapChance]),
 ]

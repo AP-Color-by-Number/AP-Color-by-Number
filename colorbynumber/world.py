@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from BaseClasses import Item, ItemClassification, Location, Region, Tutorial
+from BaseClasses import Item, ItemClassification, Location, LocationProgressType, Region, Tutorial
 from worlds.AutoWorld import WebWorld, World
 
 from .data import (
@@ -119,6 +119,10 @@ class ColorByNumberWorld(World):
                     refills = refills_needed(uses)
                     loc.access_rule = (lambda state, t=tool, r=REFILL_FOR[tool], k=refills:
                                        state.has(t, player) and state.has(r, player, k))
+                    if self.options.tool_check_rewards == self.options.tool_check_rewards.option_filler_only:
+                        # Excluded: fill puts only filler or traps here, so
+                        # skipping the tools can never hold anyone up.
+                        loc.progress_type = LocationProgressType.EXCLUDED
                     menu.locations.append(loc)
 
         required = color_names + [canvas_item(p) for p in range(2, self.pictures + 1)]
