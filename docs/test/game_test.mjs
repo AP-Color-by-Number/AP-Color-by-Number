@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 
 import * as data from "../src/data.js";
 import { Game, validPicture } from "../src/game.js";
+import { checkModel } from "../src/checks.js";
 import { colorDistance, generatePicture, mapToPalette, pictureFromImage, prepareImage, quantize, rng } from "../src/picture.js";
 
 let checks = 0;
@@ -179,6 +180,53 @@ for (const k of [4, 7, 10, 16, 24]) {
   eq(g.charges.bucket, 1, "5 + 3 + 3 - 10 charges left");
   eq(g.apply(0, c.cells.indexOf(1), 1, "bucket").length, 0, "wrong number: no use");
   eq(g.spent.bucket, 10, "wrong number spends nothing");
+}
+
+// -- the side check list mirrors the world's rules and counts
+{
+  // Totals match the world's location counts (test_world.py) for the same options.
+  const count = (slot) => checkModel(new Game(slot), { done: new Set() }).total;
+  const base = { grid_size: 16, picture_seed: 9 };
+  eq(count({ ...base, pictures: 3, colors_per_picture: 10, color_percents: [25, 50, 75, 100], tool_checks: true }), 3 * 44 + 6, "default total");
+  eq(count({ ...base, pictures: 1, colors_per_picture: 4 }), 4 * 4 + 4, "v0.1 slot total");
+  eq(count({ ...base, pictures: 2, colors_per_picture: 5, color_percents: [20, 40, 60, 80, 100], tool_checks: true }), 2 * (5 * 5 + 4) + 6, "fifths total");
+
+  const slot = { ...base, pictures: 2, colors_per_picture: 4, color_percents: [25, 50, 75, 100], tool_checks: true };
+  const g = new Game(slot);
+  g.setItems([data.colorItem(1), data.colorItem(2)]);
+  let m = checkModel(g, { done: new Set() });
+  const states = (pills) => pills.map((x) => x.state).join(",");
+  eq(states(m.pictures[0].rows[0].pills), "open,open,open,open", "owned color open");
+  eq(states(m.pictures[0].rows[2].pills), "locked,locked,locked,locked", "missing color locked");
+  ok(m.pictures[0].rows[2].pills[0].why.includes("needs Color 3"), "locked says what it needs");
+  eq(states(m.pictures[1].rows[0].pills), "locked,locked,locked,locked", "locked picture");
+  ok(m.pictures[1].rows[0].pills[0].why.includes("Picture 2 Unlocked"), "picture lock reason");
+  // 4 colors: quarter needs 1 finished, half 2, three quarters 3, all 4. Two colors received.
+  eq(states(m.pictures[0].milestones), "open,open,locked,locked", "milestones by colors received");
+  eq(m.tools.map((t) => states(t.pills)).join("|"), "locked,locked,locked|locked,locked,locked", "no tools yet");
+
+  // Bucket + one refill = 8 charges: 3 and 5 open, 10 needs more refills.
+  g.setItems([data.colorItem(1), data.colorItem(2), data.PAINT_BUCKET, data.BUCKET_REFILL]);
+  m = checkModel(g, { done: new Set() });
+  eq(states(m.tools[0].pills), "open,open,locked", "bucket by charges");
+  ok(m.tools[0].pills[2].why.includes("Refills"), "needs refills reason");
+
+  // Done comes from the checked set; progression marks only unchecked pills.
+  const id = data.colorLocationId(1, 1, 25), id2 = data.colorLocationId(1, 1, 50);
+  m = checkModel(g, { done: new Set([id]), progression: new Set([id, id2]) });
+  eq(m.pictures[0].rows[0].pills.map((x) => [x.state, x.important]).slice(0, 2), [["done", false], ["open", true]], "done and important");
+  eq([m.have, m.pictures[0].counts.have], [1, 1], "counts have");
+
+  // A room that lacks a location hides its pill and leaves it out of the total.
+  m = checkModel(g, { done: new Set(), inSeed: new Set([id]) });
+  eq(m.total, 1, "inSeed filters");
+
+  // Open + done never exceeds what the game can actually reach once everything is in.
+  const all = new Game(slot);
+  all.setItems([1, 2, 3, 4].map(data.colorItem).concat(data.canvasItem(2), data.PAINT_BUCKET, data.WIDE_BRUSH,
+    data.BUCKET_REFILL, data.BUCKET_REFILL, data.BRUSH_REFILL, data.BRUSH_REFILL));
+  m = checkModel(all, { done: new Set() });
+  eq([m.open, m.total], [m.total, 2 * 20 + 6], "everything open with every item");
 }
 
 // -- names and ids match the Python world

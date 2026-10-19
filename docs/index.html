@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Color by Number AP</title>
-  <meta name="build" content="?v=69ac5b50">
+  <meta name="build" content="?v=81862bf0">
   <meta name="description" content="A color-by-number game for Archipelago: every numbered color is an item.">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
   <link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <meta property="og:image" content="https://ap-color-by-number.github.io/AP-Color-by-Number/assets/icon-512.png">
-  <link rel="stylesheet" href="style.css?v=69ac5b50">
+  <link rel="stylesheet" href="style.css?v=81862bf0">
 </head>
 <body>
   <header class="top">
@@ -92,6 +92,19 @@
       <summary>Log</summary>
       <ol id="log"></ol>
     </details>
+
+    <!-- Every check this seed has, from the slot's own options, and where you
+         are on each. Hidden offline: practice has no checks. -->
+    <aside id="checks-panel" class="checks-panel" aria-label="Checks" hidden>
+      <h2>Checks <small id="checks-summary"></small></h2>
+      <p class="legend">
+        <span class="chk is-done">✓</span> checked
+        <span class="chk is-open">25</span> can get now
+        <span class="chk is-locked">25</span> needs an item
+      </p>
+      <label class="star-toggle"><input type="checkbox" id="star-toggle"> Show ★ on checks that hold an item someone needs</label>
+      <div id="checks-body"></div>
+    </aside>
   </main>
 
   <footer class="credits">Inspired by an idea from Discord user <strong>Dratini64</strong> ·
@@ -119,6 +132,6 @@
 
   <div id="toast" class="toast" role="status" hidden></div>
 
-  <script type="module" src="src/ui.js?v=69ac5b50"></script>
+  <script type="module" src="src/ui.js?v=81862bf0"></script>
 </body>
 </html>

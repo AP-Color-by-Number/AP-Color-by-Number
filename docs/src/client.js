@@ -4,13 +4,13 @@
 // follows the slot to any device. Nothing is saved until the restore has
 // landed, or the freshly generated pictures would overwrite real progress.
 
-import { Client } from "../node_modules/archipelago.js/dist/index.js?v=69ac5b50";
+import { Client } from "../node_modules/archipelago.js/dist/index.js?v=81862bf0";
 
 import {
   ENCOURAGEMENT, ENCOURAGEMENTS, FOG_TRAP, GAME_NAME, GRAYSCALE_TRAP, SMUDGE_TRAP, canvasItem, colorItem,
-} from "./data.js?v=69ac5b50";
-import { Game } from "./game.js?v=69ac5b50";
-import { rng } from "./picture.js?v=69ac5b50";
+} from "./data.js?v=81862bf0";
+import { Game } from "./game.js?v=81862bf0";
+import { rng } from "./picture.js?v=81862bf0";
 
 const OFFLINE_KEY = "cbn_offline";
 const SAVE_DELAY_MS = 1500;
@@ -24,6 +24,7 @@ export class CbnClient {
   constructor(hooks = {}) {
     this.hooks = { onUpdate() {}, onCells() {}, onLog() {}, onEffect() {}, onSound() {}, ...hooks };
     this.lastSent = 0; // checks the most recent afterPaint sent, for the UI's sound
+    this.progressionAt = new Set(); // location ids holding someone's progression item
     this.client = new Client();
     this.game = null;
     this.connected = false;
@@ -91,7 +92,42 @@ export class CbnClient {
     this.handleNewItems();
     this.hooks.onLog(`Connected as ${slotName}.`, "info");
     this.afterPaint();
+    this.scoutProgression(); // not awaited: the list fills in when it lands
     return slotData;
+  }
+
+  /** Every location id this room has for the slot, or null offline. */
+  seedLocations() {
+    if (!this.connected) return null;
+    const all = this.client.room.allLocations;
+    return Array.isArray(all) && all.length ? new Set(all) : null;
+  }
+
+  /** Checked ids: ours this session plus whatever the room already knows. */
+  checkedLocations() {
+    const ids = new Set(this.game?.reported ?? []);
+    if (this.connected) for (const id of this.client.room.checkedLocations) ids.add(id);
+    return ids;
+  }
+
+  /**
+   * Which unchecked locations hold progression, so the check list can star
+   * them. Only that bit is kept, never the item: a star says "this one matters
+   * to somebody", which is the thing a stuck player needs (the bucket check
+   * holding Color 7), without spoiling what it is. A plain scout, not a hint,
+   * so nothing is announced to the room.
+   */
+  async scoutProgression() {
+    this.progressionAt = new Set();
+    const ids = this.connected ? this.client.room.missingLocations : [];
+    if (!ids.length) return;
+    try {
+      const items = await this.client.scout(ids, 0);
+      items.forEach((item, i) => { if (item.progression) this.progressionAt.add(ids[i]); });
+    } catch (err) {
+      this.hooks.onLog(`Could not read which checks matter: ${err.message}`, "warn");
+    }
+    this.hooks.onUpdate();
   }
 
   async restore() {

@@ -1,10 +1,11 @@
 // DOM layer: the canvas, palette, tools and forms. Reads CbnClient + Game,
 // never changes game state except through them.
 
-import { play, setMuted, setVolume, soundSettings } from "./sound.js?v=69ac5b50";
-import { CbnClient } from "./client.js?v=69ac5b50";
-import { TOOL_USES, canvasItem, colorItem } from "./data.js?v=69ac5b50";
-import { colorDistance, lightness, mapToPalette, oklchHex, prepareImage, quantize } from "./picture.js?v=69ac5b50";
+import { play, setMuted, setVolume, soundSettings } from "./sound.js?v=81862bf0";
+import { CbnClient } from "./client.js?v=81862bf0";
+import { checkModel } from "./checks.js?v=81862bf0";
+import { TOOL_USES, canvasItem, colorItem } from "./data.js?v=81862bf0";
+import { colorDistance, lightness, mapToPalette, oklchHex, prepareImage, quantize } from "./picture.js?v=81862bf0";
 
 const $ = (id) => document.getElementById(id);
 const canvasEl = $("canvas");
@@ -542,7 +543,152 @@ function renderPalette() {
   }));
 }
 
+// -- check list --------------------------------------------------------------------------
+// Rebuilt after every change, but coalesced: a brush drag paints many cells in
+// one burst and the list only needs to catch up once.
+let checksQueued = false;
+const openGroups = new Map(); // group key -> open?, only for groups the player toggled
+const STAR_KEY = "cbn_stars";
+let showStars = true;
+try { showStars = localStorage.getItem(STAR_KEY) !== "0"; } catch { /* default on */ }
+$("star-toggle").checked = showStars;
+$("star-toggle").addEventListener("change", () => {
+  showStars = $("star-toggle").checked;
+  try { localStorage.setItem(STAR_KEY, showStars ? "1" : "0"); } catch { /* fine */ }
+  renderChecks();
+});
+
+function queueChecks() {
+  if (checksQueued) return;
+  checksQueued = true;
+  queueMicrotask(() => { checksQueued = false; renderChecks(); });
+}
+
+function renderChecks() {
+  const g = cbn.game, panel = $("checks-panel");
+  panel.hidden = !g || cbn.offline || !cbn.connected;
+  if (panel.hidden) return;
+  const model = checkModel(g, { done: cbn.checkedLocations(), inSeed: cbn.seedLocations(), progression: cbn.progressionAt });
+  $("checks-summary").textContent = `${model.have} of ${model.total} checked · ${model.open} can get now`;
+
+  const groups = [];
+  if (model.tools.length) {
+    groups.push(group("tools", "Tools", sumCounts(model.tools.map((t) => t.counts)), true, () =>
+      grid(Math.max(...model.tools.map((t) => t.pills.length)), model.tools.map((t) => ({
+        label: rowLabel({ text: t.name, frac: `used ${t.used}`, dim: !t.has }),
+        pills: t.pills,
+      })))));
+  }
+  for (const pic of model.pictures) {
+    const title = `${pic.unlocked ? "" : "🔒 "}Picture ${pic.p + 1}`;
+    groups.push(group(`p${pic.p}`, title, pic.counts, pic.p === view.picture, () => {
+      const c = g.canvases[pic.p];
+      const rows = pic.rows.map((row) => ({
+        label: rowLabel({
+          text: `Color ${row.color + 1}`, frac: `${row.painted}/${row.cells}`, dim: !row.have || !pic.unlocked,
+          dot: row.have ? c.palette[row.color] : null,
+          pick: row.have && pic.unlocked ? () => pickColor(pic.p, row.color) : null,
+        }),
+        pills: row.pills,
+      }));
+      rows.push({ label: rowLabel({ text: "Whole picture", frac: `${c.finishedColors()}/${g.k} colors`, dim: !pic.unlocked }), pills: pic.milestones });
+      return grid(Math.max(...rows.map((r) => r.pills.length)), rows);
+    }));
+  }
+  $("checks-body").replaceChildren(...groups);
+}
+
+function sumCounts(list) {
+  return list.reduce((a, b) => ({ have: a.have + b.have, total: a.total + b.total, open: a.open + b.open }),
+    { have: 0, total: 0, open: 0 });
+}
+
+/** A collapsible group; its pills are only built while it is open. */
+function group(key, title, counts, defaultOpen, build) {
+  const details = document.createElement("details");
+  details.open = openGroups.has(key) ? openGroups.get(key) : defaultOpen;
+  const summary = document.createElement("summary");
+  const name = Object.assign(document.createElement("span"), { textContent: title });
+  const count = document.createElement("span");
+  count.className = "count";
+  count.textContent = `${counts.have}/${counts.total}`;
+  if (counts.open) {
+    count.append(" · ", Object.assign(document.createElement("span"), { className: "open-count", textContent: `${counts.open} now` }));
+  }
+  summary.append(name, count);
+  details.append(summary);
+  if (details.open) details.append(build());
+  // Creating a <details> that starts open fires "toggle" too. Re-rendering on
+  // that one would build another open group, which fires again, forever, so
+  // only a real change from the state it was built in counts.
+  const builtOpen = details.open;
+  details.addEventListener("toggle", () => {
+    if (details.open === builtOpen) return;
+    openGroups.set(key, details.open);
+    renderChecks();
+  });
+  return details;
+}
+
+function rowLabel({ text, frac, dim = false, dot, pick = null }) {
+  const label = document.createElement(pick ? "button" : "span");
+  label.className = "chk-label";
+  label.classList.toggle("dim", dim);
+  if (dot !== undefined) {
+    const d = document.createElement("span");
+    d.className = `dot${dot ? "" : " none"}`;
+    if (dot) d.style.background = dot;
+    label.append(d);
+  }
+  label.append(text, Object.assign(document.createElement("span"), { className: "frac", textContent: frac }));
+  if (pick) {
+    label.classList.add("can-pick");
+    label.title = `Paint ${text}`;
+    label.addEventListener("click", pick);
+  }
+  return label;
+}
+
+function grid(columns, rows) {
+  const box = document.createElement("div");
+  box.className = "chk-grid";
+  // Up to six pills fit beside the label; "every 10%" seeds have ten, so their
+  // label goes on its own line above the pills instead of scrolling sideways.
+  const stacked = columns > 6;
+  box.classList.toggle("stacked", stacked);
+  box.style.gridTemplateColumns = stacked ? `repeat(${columns}, max-content)` : `max-content repeat(${columns}, max-content)`;
+  for (const row of rows) {
+    if (stacked) row.label.style.gridColumn = "1 / -1";
+    box.append(row.label);
+    for (let i = 0; i < columns; i++) {
+      const p = row.pills[i];
+      const cell = document.createElement("span");
+      if (!p) { box.append(cell); continue; }
+      cell.className = `chk is-${p.state}`;
+      const star = showStars && p.important;
+      cell.classList.toggle("important", star);
+      cell.textContent = p.state === "done" ? "✓" : `${star ? "★" : ""}${p.label}`;
+      cell.title = `${p.name}: ${p.why}${star ? " (holds an item someone needs)" : ""}`;
+      box.append(cell);
+    }
+  }
+  return box;
+}
+
+/** Jump to a picture and select a color from its row in the list. */
+function pickColor(p, color) {
+  if (view.picture !== p) {
+    view.picture = p;
+    view.zoom = null;
+  }
+  view.color = color;
+  view.tool = "brush";
+  view.moving = false;
+  render();
+}
+
 function renderProgress() {
+  queueChecks();
   const g = cbn.game, c = currentCanvas();
   const painted = c.done.reduce((a, b) => a + b, 0);
   const pct = Math.floor((100 * painted) / c.cells.length);

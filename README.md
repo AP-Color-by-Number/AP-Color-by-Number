@@ -32,6 +32,9 @@ paint ones generated from your seed.
 - **Traps** (none undo checks, none reset the picture): Smudge erases a few painted
   cells, Grayscale hides the colors for 45 s, Number Fog hides the numbers for 45 s.
 - **Goal**: finish every picture.
+- **Check list**: a side panel lists every check your seed has, built from your yaml's
+  options, marked checked / can get now / needs an item (and what item), with a ★ on
+  checks that hold something someone needs. Click a color's row to paint it.
 - **Sound**: soft synthesized effects for painting, tools, checks, received items, traps and
   finished colors/pictures. Mute and volume are in the top bar.
 

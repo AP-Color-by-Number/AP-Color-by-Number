@@ -166,6 +166,56 @@ main { max-width: 1100px; margin: 0 auto; padding: 8px 16px 24px; display: flex;
 .warn-text { color: var(--warn); font-size: 13px; min-height: 1em; margin: 8px 0 0; }
 .dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 
+/* -- check list ---------------------------------------------------------------------- */
+.checks-panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  font-size: 13px;
+}
+.checks-panel h2 { margin: 0 0 4px; font-size: 15px; }
+.checks-panel h2 small { color: var(--muted); font-weight: 500; font-size: 12px; font-variant-numeric: tabular-nums; }
+.checks-panel .legend { margin: 0 0 6px; color: var(--muted); font-size: 12px; display: flex; gap: 4px 6px; flex-wrap: wrap; align-items: center; }
+.star-toggle { flex-direction: row; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 6px; }
+.checks-panel details { border-top: 1px solid var(--line); padding: 4px 0; }
+.checks-panel summary { cursor: pointer; display: flex; gap: 6px; align-items: baseline; }
+.checks-panel summary::before { content: "▸"; color: var(--muted); }
+.checks-panel details[open] > summary::before { content: "▾"; }
+.checks-panel summary::-webkit-details-marker { display: none; }
+.checks-panel summary .count { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.checks-panel summary .open-count { color: var(--accent); }
+.chk-grid { display: grid; gap: 3px; align-items: center; justify-content: start; margin: 4px 0 2px; overflow-x: auto; }
+.chk-label {
+  display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink); white-space: nowrap;
+  background: none; border: 0; padding: 0 6px 0 0; cursor: default; justify-content: flex-start;
+}
+.chk-label.can-pick { cursor: pointer; }
+.chk-label.can-pick:hover { text-decoration: underline; }
+.chk-label .dot { width: 12px; height: 12px; border-radius: 3px; flex: none; border: 1px solid var(--line); }
+.chk-label .dot.none { background: repeating-linear-gradient(45deg, var(--line) 0 3px, transparent 3px 6px); }
+.chk-label .frac { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chk-label.dim { opacity: 0.55; }
+.chk-grid.stacked .chk-label { margin-top: 3px; }
+.chk {
+  font-size: 11px; line-height: 1.7; padding: 0 4px; min-width: 26px; border-radius: 5px; border: 1px solid var(--line);
+  text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+/* Three states, three weights: what matters is which ones you can go and get now.
+   Prefixed "is-": a bare .locked is the picture-locked overlay, which is
+   absolutely positioned and would stretch every locked pill over the panel. */
+.chk.is-done { background: var(--good); border-color: var(--good); color: #fff; }
+.chk.is-open { border-color: var(--accent); color: var(--ink); }
+.chk.is-locked { color: var(--muted); opacity: 0.55; }
+.chk.important { font-weight: 700; box-shadow: inset 0 0 0 1px var(--warn); }
+
+@media (min-width: 1000px) {
+  main#game {
+    max-width: 1440px; display: grid; grid-template-columns: minmax(0, 1fr) 360px; column-gap: 16px; align-items: start;
+  }
+  main#game > * { grid-column: 1; }
+  main#game > .checks-panel {
+    grid-column: 2; grid-row: 1 / span 9; position: sticky; top: 8px; max-height: calc(100vh - 16px); overflow: auto;
+  }
+}
+
 .update-banner {
   display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
   padding: 8px 16px; background: var(--warn); color: #1f1300; font-size: 14px; text-align: center;
